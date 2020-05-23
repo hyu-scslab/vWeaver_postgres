@@ -140,11 +140,19 @@ brinhandler(PG_FUNCTION_ARGS)
  * If the range is not currently summarized (i.e. the revmap returns NULL for
  * it), there's nothing to do for this tuple.
  */
+#ifdef SCSLAB_CVC
+bool
+brininsert(Relation idxRel, Datum *values, bool *nulls,
+		   ItemPointer heaptid, Relation heapRel,
+		   IndexUniqueCheck checkUnique,
+		   IndexInfo *indexInfo, bool inplaceUpdate)
+#else
 bool
 brininsert(Relation idxRel, Datum *values, bool *nulls,
 		   ItemPointer heaptid, Relation heapRel,
 		   IndexUniqueCheck checkUnique,
 		   IndexInfo *indexInfo)
+#endif
 {
 	BlockNumber pagesPerRange;
 	BlockNumber origHeapBlk;

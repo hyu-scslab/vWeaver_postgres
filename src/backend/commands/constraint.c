@@ -173,9 +173,15 @@ unique_key_recheck(PG_FUNCTION_ARGS)
 		 * the row is now dead, because that is the TID the index will know
 		 * about.
 		 */
+#ifdef SCSLAB_CVC
+		index_insert(indexRel, values, isnull, &checktid,
+					 trigdata->tg_relation, UNIQUE_CHECK_EXISTING,
+					 indexInfo, false);
+#else
 		index_insert(indexRel, values, isnull, &checktid,
 					 trigdata->tg_relation, UNIQUE_CHECK_EXISTING,
 					 indexInfo);
+#endif
 	}
 	else
 	{

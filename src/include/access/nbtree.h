@@ -695,10 +695,17 @@ typedef BTScanOpaqueData *BTScanOpaque;
  * external entry points for btree, in nbtree.c
  */
 extern void btbuildempty(Relation index);
+#ifdef SCSLAB_CVC
+extern bool btinsert(Relation rel, Datum *values, bool *isnull,
+					 ItemPointer ht_ctid, Relation heapRel,
+					 IndexUniqueCheck checkUnique,
+					 struct IndexInfo *indexInfo, bool inplaceUpdate);
+#else
 extern bool btinsert(Relation rel, Datum *values, bool *isnull,
 					 ItemPointer ht_ctid, Relation heapRel,
 					 IndexUniqueCheck checkUnique,
 					 struct IndexInfo *indexInfo);
+#endif
 extern IndexScanDesc btbeginscan(Relation rel, int nkeys, int norderbys);
 extern Size btestimateparallelscan(void);
 extern void btinitparallelscan(void *target);
@@ -729,8 +736,14 @@ extern void _bt_parallel_advance_array_keys(IndexScanDesc scan);
 /*
  * prototypes for functions in nbtinsert.c
  */
+#ifdef SCSLAB_CVC
+extern bool _bt_doinsert(Relation rel, IndexTuple itup,
+						 IndexUniqueCheck checkUnique, Relation heapRel,
+						 bool inplaceUpdate);
+#else
 extern bool _bt_doinsert(Relation rel, IndexTuple itup,
 						 IndexUniqueCheck checkUnique, Relation heapRel);
+#endif
 extern Buffer _bt_getstackbuf(Relation rel, BTStack stack);
 extern void _bt_finish_split(Relation rel, Buffer bbuf, BTStack stack);
 

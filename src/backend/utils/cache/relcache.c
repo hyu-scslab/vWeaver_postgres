@@ -2074,6 +2074,13 @@ RelationDecrementReferenceCount(Relation rel)
 	if (!IsBootstrapProcessingMode())
 		ResourceOwnerForgetRelationRef(CurrentResourceOwner, rel);
 }
+#ifdef SCSLAB_CVC
+bool
+VersionChainIsNewToOld(Relation rel)
+{
+	return !IsSystemRelation(rel);
+}
+#endif
 
 /*
  * RelationClose - close an open relation

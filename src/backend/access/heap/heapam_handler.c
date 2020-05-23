@@ -112,6 +112,154 @@ heapam_index_fetch_end(IndexFetchTableData *scan)
 
 	pfree(hscan);
 }
+#ifdef SCSLAB_CVC
+static bool
+heapam_index_fetch_tuple_for_cvc(
+		struct IndexFetchTableData *scan,
+		ItemPointer tid,
+		Snapshot snapshot,
+		TupleTableSlot *slot,
+		bool *call_again, bool *all_dead)
+{
+	/* Get a visible version by tranversing with t_ctid. */
+	/* This code refers to heap_get_latest_tid(). */
+	IndexFetchHeapData *hscan = (IndexFetchHeapData *) scan;
+	BufferHeapTupleTableSlot *bslot = (BufferHeapTupleTableSlot *) slot;
+	bool			got_heap_tuple = false;
+
+	Relation		relation = hscan->xs_base.rel;
+	ItemPointerData	ctid;
+	TransactionId	priorXmin;
+
+
+	Assert(TTS_IS_BUFFERTUPLE(slot));
+
+
+#ifdef SCSLAB_CVC_VERBOSE
+	elog(WARNING, "[SCSLAB_CVC] heapam_index_fetch_tuple_for_cvc\n%s",
+			RelationGetRelationName(hscan->xs_base.rel));
+#endif
+
+
+	ctid = *tid;
+	priorXmin = InvalidTransactionId;
+
+	for (;;)
+	{
+		Buffer			buffer;
+		Page			page;
+		OffsetNumber	offnum;
+		ItemId			lp;
+		HeapTuple		heapTuple = &bslot->base.tupdata;
+		bool			valid;
+		ItemPointerData	prev_ctid;
+
+		/*
+		 * Read, pin, and lock the page.
+		 */
+		buffer = ReadBuffer(relation, ItemPointerGetBlockNumber(&ctid));
+		LockBuffer(buffer, BUFFER_LOCK_SHARE);
+		page = BufferGetPage(buffer);
+		TestForOldSnapshot(snapshot, relation, page);
+
+		/*
+		 * Check for bogus item number.  This is not treated as an error
+		 * condition because it can happen while following a t_ctid link. We
+		 * just assume that the prior tid is OK and return it unchanged.
+		 */
+		offnum = ItemPointerGetOffsetNumber(&ctid);
+		if (offnum < FirstOffsetNumber || offnum > PageGetMaxOffsetNumber(page))
+		{
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+		lp = PageGetItemId(page, offnum);
+		if (!ItemIdIsNormal(lp))
+		{
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		/* OK to access the tuple */
+		heapTuple->t_self = ctid;
+		heapTuple->t_data = (HeapTupleHeader) PageGetItem(page, lp);
+		heapTuple->t_len = ItemIdGetLength(lp);
+		heapTuple->t_tableOid = RelationGetRelid(relation);
+
+#ifdef SCSLAB_CVC_VERBOSE
+		elog(WARNING, "[SCSLAB_CVC]\n"
+				"block num, offset num : (%u, %u)\n%s\n"
+				"xmin : %d",
+				ItemPointerGetBlockNumber(&ctid),
+				ItemPointerGetOffsetNumber(&ctid),
+				RelationGetRelationName(hscan->xs_base.rel),
+				HeapTupleHeaderGetXmin(heapTuple->t_data));
+#endif
+		/*
+		 * After following a t_ctid link, we might arrive at an unrelated
+		 * tuple.  Check for XMIN match.
+		 */
+		if (TransactionIdIsValid(priorXmin) &&
+			!TransactionIdEquals(priorXmin, HeapTupleHeaderGetUpdateXid(heapTuple->t_data)))
+		{
+#ifdef SCSLAB_CVC_VERBOSE
+			elog(WARNING, "[SCSLAB_CVC] unrelated tuple!!!");
+#endif
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		/*
+		 * Check tuple visibility; if visible, set it as the new result
+		 * candidate.
+		 * FIND IT !!!!!!!!!!!!!!!
+		 */
+		valid = HeapTupleSatisfiesVisibility(heapTuple, snapshot, buffer);
+		CheckForSerializableConflictOut(valid, relation, heapTuple, buffer, snapshot);
+		if (valid)
+		{
+#ifdef SCSLAB_CVC_VERBOSE
+			elog(WARNING, "[SCSLAB_CVC] visible version %s",
+				RelationGetRelationName(hscan->xs_base.rel));
+#endif
+			got_heap_tuple = true;
+			*tid = ctid;
+			//PredicateLockTuple(relation, heapTuple, snapshot);
+			ExecStoreBufferHeapTuple(heapTuple, slot, buffer);
+
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+#ifdef SCSLAB_CVC_VERBOSE
+		elog(WARNING, "[SCSLAB_CVC] invisible version %s",
+			RelationGetRelationName(hscan->xs_base.rel));
+#endif
+
+		prev_ctid = heapTuple->t_data->t_ctid_prev;
+		if (ItemPointerGetBlockNumber(&ctid) == ItemPointerGetBlockNumber(&prev_ctid)
+				&& ItemPointerGetOffsetNumber(&ctid) == ItemPointerGetOffsetNumber(&prev_ctid))
+		{
+#ifdef SCSLAB_CVC_VERBOSE
+			elog(WARNING, "[SCSLAB_CVC] ctid == prev_ctid");
+#endif
+			ExecStoreBufferHeapTuple(heapTuple, slot, buffer);
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+		ctid = prev_ctid;
+		priorXmin = HeapTupleHeaderGetXmin(heapTuple->t_data);
+		UnlockReleaseBuffer(buffer);
+	}
+
+	*call_again = false;
+	if (all_dead)
+	{
+		*all_dead = false;
+	}
+
+	return got_heap_tuple;
+}
+#endif
 
 static bool
 heapam_index_fetch_tuple(struct IndexFetchTableData *scan,
@@ -123,9 +271,19 @@ heapam_index_fetch_tuple(struct IndexFetchTableData *scan,
 	IndexFetchHeapData *hscan = (IndexFetchHeapData *) scan;
 	BufferHeapTupleTableSlot *bslot = (BufferHeapTupleTableSlot *) slot;
 	bool		got_heap_tuple;
+#ifdef SCSLAB_CVC
+	Relation	relation = hscan->xs_base.rel;
+#endif
 
 	Assert(TTS_IS_BUFFERTUPLE(slot));
 
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(relation)) {
+		return heapam_index_fetch_tuple_for_cvc(
+					scan, tid, snapshot,
+					slot, call_again, all_dead);
+	}
+#endif
 	/* We can skip the buffer-switching logic if we're in mid-HOT chain. */
 	if (!*call_again)
 	{
@@ -341,7 +499,15 @@ heapam_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *slot,
 	 *
 	 * If it's a HOT update, we mustn't insert new index entries.
 	 */
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(relation)) {
+		*update_indexes = result == TM_Ok;
+	} else {
+		*update_indexes = result == TM_Ok && !HeapTupleIsHeapOnly(tuple);
+	}
+#else
 	*update_indexes = result == TM_Ok && !HeapTupleIsHeapOnly(tuple);
+#endif
 
 	if (shouldFree)
 		pfree(tuple);
@@ -1922,6 +2088,17 @@ heapam_index_validate_scan(Relation heapRelation,
 			 * there is one.
 			 */
 
+#ifdef SCSLAB_CVC
+			index_insert(indexRelation,
+						 values,
+						 isnull,
+						 &rootTuple,
+						 heapRelation,
+						 indexInfo->ii_Unique ?
+						 UNIQUE_CHECK_YES : UNIQUE_CHECK_NO,
+						 indexInfo,
+						 false);
+#else
 			index_insert(indexRelation,
 						 values,
 						 isnull,
@@ -1930,6 +2107,7 @@ heapam_index_validate_scan(Relation heapRelation,
 						 indexInfo->ii_Unique ?
 						 UNIQUE_CHECK_YES : UNIQUE_CHECK_NO,
 						 indexInfo);
+#endif
 
 			state->tups_inserted += 1;
 		}

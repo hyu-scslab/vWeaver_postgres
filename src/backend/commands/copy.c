@@ -2480,8 +2480,13 @@ CopyMultiInsertBufferFlush(CopyMultiInsertInfo *miinfo,
 
 			cstate->cur_lineno = buffer->linenos[i];
 			recheckIndexes =
+#ifdef SCSLAB_CVC
+				ExecInsertIndexTuples(buffer->slots[i], estate, false, NULL,
+									  NIL, false);
+#else
 				ExecInsertIndexTuples(buffer->slots[i], estate, false, NULL,
 									  NIL);
+#endif
 			ExecARInsertTriggers(estate, resultRelInfo,
 								 slots[i], recheckIndexes,
 								 cstate->transition_capture);
@@ -3296,11 +3301,20 @@ CopyFrom(CopyState cstate)
 										   myslot, mycid, ti_options, bistate);
 
 						if (resultRelInfo->ri_NumIndices > 0)
+#ifdef SCSLAB_CVC
+							recheckIndexes = ExecInsertIndexTuples(myslot,
+																   estate,
+																   false,
+																   NULL,
+																   NIL,
+																   false);
+#else
 							recheckIndexes = ExecInsertIndexTuples(myslot,
 																   estate,
 																   false,
 																   NULL,
 																   NIL);
+#endif
 					}
 
 					/* AFTER ROW INSERT Triggers */

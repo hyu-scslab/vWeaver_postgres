@@ -1873,6 +1873,12 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 	Buffer		buffer;
 	Buffer		vmbuffer = InvalidBuffer;
 	bool		all_visible_cleared = false;
+#ifdef SCSLAB_CVC_VERBOSE
+	if (VersionChainIsNewToOld(relation)) {
+		elog(WARNING, "[SCSLAB_CVC] heap_insert\n%s",
+				RelationGetRelationName(relation));
+	}
+#endif
 
 	/*
 	 * Fill in tuple header fields and toast the tuple if necessary.
@@ -1910,8 +1916,14 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 	/* NO EREPORT(ERROR) from here till changes are logged */
 	START_CRIT_SECTION();
 
+#ifdef SCSLAB_CVC
+	RelationPutHeapTuple(relation, buffer, heaptup,
+						 (options & HEAP_INSERT_SPECULATIVE) != 0,
+						 true);
+#else
 	RelationPutHeapTuple(relation, buffer, heaptup,
 						 (options & HEAP_INSERT_SPECULATIVE) != 0);
+#endif
 
 	if (PageIsAllVisible(BufferGetPage(buffer)))
 	{
@@ -2187,7 +2199,11 @@ heap_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples,
 		 * RelationGetBufferForTuple has ensured that the first tuple fits.
 		 * Put that on the page, and then as many other tuples as fit.
 		 */
+#ifdef SCSLAB_CVC
+		RelationPutHeapTuple(relation, buffer, heaptuples[ndone], false, true);
+#else
 		RelationPutHeapTuple(relation, buffer, heaptuples[ndone], false);
+#endif
 		for (nthispage = 1; ndone + nthispage < ntuples; nthispage++)
 		{
 			HeapTuple	heaptup = heaptuples[ndone + nthispage];
@@ -2195,7 +2211,11 @@ heap_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples,
 			if (PageGetHeapFreeSpace(page) < MAXALIGN(heaptup->t_len) + saveFreeSpace)
 				break;
 
+#ifdef SCSLAB_CVC
+			RelationPutHeapTuple(relation, buffer, heaptup, false, true);
+#else
 			RelationPutHeapTuple(relation, buffer, heaptup, false);
+#endif
 
 			/*
 			 * We don't use heap_multi_insert for catalog tuples yet, but
@@ -3648,8 +3668,29 @@ l2:
 		HeapTupleClearHeapOnly(heaptup);
 		HeapTupleClearHeapOnly(newtup);
 	}
+#ifdef SCSLAB_CVC
+	/* Link new to old. */
+	heaptup->t_data->t_ctid_prev = oldtup.t_self;
+#endif
 
+#ifdef SCSLAB_CVC
+	RelationPutHeapTuple(relation, newbuf, heaptup, false, false); /* insert new tuple */
+#ifdef SCSLAB_CVC_VERBOSE
+	if (VersionChainIsNewToOld(relation)) {
+		elog(WARNING, "[SCSLAB_CVC] heap update\n"
+				"heap block num, offset num : (%u, %u)\n"
+				"xmin : %d\n"
+				"old version :                (%u, %u)",
+				ItemPointerGetBlockNumber(&heaptup->t_self),
+				ItemPointerGetOffsetNumber(&heaptup->t_self),
+				HeapTupleHeaderGetXmin(heaptup->t_data),
+				ItemPointerGetBlockNumber(&heaptup->t_data->t_ctid_prev),
+				ItemPointerGetOffsetNumber(&heaptup->t_data->t_ctid_prev));
+	}
+#endif
+#else
 	RelationPutHeapTuple(relation, newbuf, heaptup, false); /* insert new tuple */
+#endif
 
 
 	/* Clear obsolete visibility flags, possibly set by ourselves above... */

@@ -147,11 +147,19 @@ gistbuildempty(Relation index)
  *	  This is the public interface routine for tuple insertion in GiSTs.
  *	  It doesn't do any work; just locks the relation and passes the buck.
  */
+#ifdef SCSLAB_CVC
+bool
+gistinsert(Relation r, Datum *values, bool *isnull,
+		   ItemPointer ht_ctid, Relation heapRel,
+		   IndexUniqueCheck checkUnique,
+		   IndexInfo *indexInfo, bool inplaceUpdate)
+#else
 bool
 gistinsert(Relation r, Datum *values, bool *isnull,
 		   ItemPointer ht_ctid, Relation heapRel,
 		   IndexUniqueCheck checkUnique,
 		   IndexInfo *indexInfo)
+#endif
 {
 	GISTSTATE  *giststate = (GISTSTATE *) indexInfo->ii_AmCache;
 	IndexTuple	itup;

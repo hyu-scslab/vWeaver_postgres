@@ -241,11 +241,19 @@ hashbuildCallback(Relation index,
  *	Hash on the heap tuple's key, form an index tuple with hash code.
  *	Find the appropriate location for the new tuple, and put it there.
  */
+#ifdef SCSLAB_CVC
+bool
+hashinsert(Relation rel, Datum *values, bool *isnull,
+		   ItemPointer ht_ctid, Relation heapRel,
+		   IndexUniqueCheck checkUnique,
+		   IndexInfo *indexInfo, bool inplaceUpdate)
+#else
 bool
 hashinsert(Relation rel, Datum *values, bool *isnull,
 		   ItemPointer ht_ctid, Relation heapRel,
 		   IndexUniqueCheck checkUnique,
 		   IndexInfo *indexInfo)
+#endif
 {
 	Datum		index_values[1];
 	bool		index_isnull[1];

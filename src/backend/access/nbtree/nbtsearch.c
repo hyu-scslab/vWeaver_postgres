@@ -1326,6 +1326,18 @@ readcomplete:
 	scan->xs_heaptid = currItem->heapTid;
 	if (scan->xs_want_itup)
 		scan->xs_itup = (IndexTuple) (so->currTuples + currItem->tupleOffset);
+#ifdef SCSLAB_CVC_VERBOSE
+	if (VersionChainIsNewToOld(scan->indexRelation)) {
+		elog(WARNING, "[SCSLAB_CVC] _bt_first\n%s\n%s\n"
+				"heap block num, offset num : (%d, %d)\n"
+				"index entry line pointer offset : %d",
+				RelationGetRelationName(scan->heapRelation),
+				RelationGetRelationName(scan->indexRelation),
+				ItemPointerGetBlockNumber(&currItem->heapTid),
+				ItemPointerGetOffsetNumber(&currItem->heapTid),
+				currItem->indexOffset);
+	}
+#endif
 
 	return true;
 }
@@ -1376,6 +1388,18 @@ _bt_next(IndexScanDesc scan, ScanDirection dir)
 	scan->xs_heaptid = currItem->heapTid;
 	if (scan->xs_want_itup)
 		scan->xs_itup = (IndexTuple) (so->currTuples + currItem->tupleOffset);
+#ifdef SCSLAB_CVC_VERBOSE
+	if (VersionChainIsNewToOld(scan->indexRelation)) {
+		elog(WARNING, "[SCSLAB_CVC] _bt_next\n%s\n%s\n"
+				"heap block num, offset num : (%d, %d)\n"
+				"index entry line pointer offset : %d",
+				RelationGetRelationName(scan->heapRelation),
+				RelationGetRelationName(scan->indexRelation),
+				ItemPointerGetBlockNumber(&currItem->heapTid),
+				ItemPointerGetOffsetNumber(&currItem->heapTid),
+				currItem->indexOffset);
+	}
+#endif
 
 	return true;
 }

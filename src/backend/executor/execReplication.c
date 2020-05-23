@@ -431,8 +431,13 @@ ExecSimpleRelationInsert(EState *estate, TupleTableSlot *slot)
 		simple_table_tuple_insert(resultRelInfo->ri_RelationDesc, slot);
 
 		if (resultRelInfo->ri_NumIndices > 0)
+#ifdef SCSLAB_CVC
+			recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL,
+												   NIL, false);
+#else
 			recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL,
 												   NIL);
+#endif
 
 		/* AFTER ROW INSERT Triggers */
 		ExecARInsertTriggers(estate, resultRelInfo, slot,
@@ -497,8 +502,13 @@ ExecSimpleRelationUpdate(EState *estate, EPQState *epqstate,
 								  &update_indexes);
 
 		if (resultRelInfo->ri_NumIndices > 0 && update_indexes)
+#ifdef SCSLAB_CVC
+			recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL,
+												   NIL, true);
+#else
 			recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL,
 												   NIL);
+#endif
 
 		/* AFTER ROW UPDATE Triggers */
 		ExecARUpdateTriggers(estate, resultRelInfo,

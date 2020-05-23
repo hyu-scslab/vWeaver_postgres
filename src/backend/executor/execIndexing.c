@@ -269,12 +269,22 @@ ExecCloseIndices(ResultRelInfo *resultRelInfo)
  *		Should we change the API to make it safer?
  * ----------------------------------------------------------------
  */
+#ifdef SCSLAB_CVC
+List *
+ExecInsertIndexTuples(TupleTableSlot *slot,
+					  EState *estate,
+					  bool noDupErr,
+					  bool *specConflict,
+					  List *arbiterIndexes,
+					  bool inplaceUpdate)
+#else
 List *
 ExecInsertIndexTuples(TupleTableSlot *slot,
 					  EState *estate,
 					  bool noDupErr,
 					  bool *specConflict,
 					  List *arbiterIndexes)
+#endif
 {
 	ItemPointer tupleid = &slot->tts_tid;
 	List	   *result = NIL;
@@ -391,6 +401,16 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 			checkUnique = UNIQUE_CHECK_PARTIAL;
 
 		satisfiesConstraint =
+#ifdef SCSLAB_CVC
+			index_insert(indexRelation, /* index relation */
+						 values,	/* array of index Datums */
+						 isnull,	/* null flags */
+						 tupleid,	/* tid of heap tuple */
+						 heapRelation,	/* heap relation */
+						 checkUnique,	/* type of uniqueness check to do */
+						 indexInfo,     /* index AM may need this */
+						 inplaceUpdate);
+#else
 			index_insert(indexRelation, /* index relation */
 						 values,	/* array of index Datums */
 						 isnull,	/* null flags */
@@ -398,6 +418,7 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 						 heapRelation,	/* heap relation */
 						 checkUnique,	/* type of uniqueness check to do */
 						 indexInfo);	/* index AM may need this */
+#endif
 
 		/*
 		 * If the index has an associated exclusion constraint, check that.

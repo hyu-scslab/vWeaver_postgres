@@ -68,6 +68,16 @@ typedef IndexBuildResult *(*ambuild_function) (Relation heapRelation,
 typedef void (*ambuildempty_function) (Relation indexRelation);
 
 /* insert this tuple */
+#ifdef SCSLAB_CVC
+typedef bool (*aminsert_function) (Relation indexRelation,
+								   Datum *values,
+								   bool *isnull,
+								   ItemPointer heap_tid,
+								   Relation heapRelation,
+								   IndexUniqueCheck checkUnique,
+								   struct IndexInfo *indexInfo,
+								   bool inplaceUpdate);
+#else
 typedef bool (*aminsert_function) (Relation indexRelation,
 								   Datum *values,
 								   bool *isnull,
@@ -75,6 +85,7 @@ typedef bool (*aminsert_function) (Relation indexRelation,
 								   Relation heapRelation,
 								   IndexUniqueCheck checkUnique,
 								   struct IndexInfo *indexInfo);
+#endif
 
 /* bulk delete */
 typedef IndexBulkDeleteResult *(*ambulkdelete_function) (IndexVacuumInfo *info,

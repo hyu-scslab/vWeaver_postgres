@@ -550,9 +550,15 @@ ExecInsert(ModifyTableState *mtstate,
 										   specToken);
 
 			/* insert index entries for tuple */
+#ifdef SCSLAB_CVC
+			recheckIndexes = ExecInsertIndexTuples(slot, estate, true,
+												   &specConflict,
+												   arbiterIndexes, false);
+#else
 			recheckIndexes = ExecInsertIndexTuples(slot, estate, true,
 												   &specConflict,
 												   arbiterIndexes);
+#endif
 
 			/* adjust the tuple's state accordingly */
 			table_tuple_complete_speculative(resultRelationDesc, slot,
@@ -589,8 +595,13 @@ ExecInsert(ModifyTableState *mtstate,
 
 			/* insert index entries for tuple */
 			if (resultRelInfo->ri_NumIndices > 0)
+#ifdef SCSLAB_CVC
+				recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL,
+													   NIL, false);
+#else
 				recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL,
 													   NIL);
+#endif
 		}
 	}
 
@@ -1444,7 +1455,11 @@ lreplace:;
 
 		/* insert index entries for tuple if necessary */
 		if (resultRelInfo->ri_NumIndices > 0 && update_indexes)
+#ifdef SCSLAB_CVC
+			recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL, NIL, true);
+#else
 			recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL, NIL);
+#endif
 	}
 
 	if (canSetTag)

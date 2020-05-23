@@ -607,5 +607,8 @@ typedef struct ViewOptions
 extern void RelationIncrementReferenceCount(Relation rel);
 extern void RelationDecrementReferenceCount(Relation rel);
 extern List *RelationGetRepsetList(Relation rel);
+#ifdef SCSLAB_CVC
+extern bool VersionChainIsNewToOld(Relation rel);
+#endif
 
 #endif							/* REL_H */

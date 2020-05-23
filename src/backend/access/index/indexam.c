@@ -166,6 +166,17 @@ index_close(Relation relation, LOCKMODE lockmode)
  *		index_insert - insert an index tuple into a relation
  * ----------------
  */
+#ifdef SCSLAB_CVC
+bool
+index_insert(Relation indexRelation,
+			 Datum *values,
+			 bool *isnull,
+			 ItemPointer heap_t_ctid,
+			 Relation heapRelation,
+			 IndexUniqueCheck checkUnique,
+			 IndexInfo *indexInfo,
+			 bool inplaceUpdate)
+#else
 bool
 index_insert(Relation indexRelation,
 			 Datum *values,
@@ -174,6 +185,7 @@ index_insert(Relation indexRelation,
 			 Relation heapRelation,
 			 IndexUniqueCheck checkUnique,
 			 IndexInfo *indexInfo)
+#endif
 {
 	RELATION_CHECKS;
 	CHECK_REL_PROCEDURE(aminsert);
@@ -183,9 +195,23 @@ index_insert(Relation indexRelation,
 									   (HeapTuple) NULL,
 									   InvalidBuffer);
 
+#ifdef SCSLAB_CVC
+#ifdef SCSLAB_CVC_VERBOSE
+	if (VersionChainIsNewToOld(heapRelation)) {
+		elog(WARNING, "[SCSLAB_CVC] index_insert\n%s\n%s",
+				RelationGetRelationName(indexRelation),
+				RelationGetRelationName(heapRelation));
+	}
+#endif
+	return indexRelation->rd_indam->aminsert(indexRelation, values, isnull,
+											 heap_t_ctid, heapRelation,
+											 checkUnique, indexInfo,
+											 inplaceUpdate);
+#else
 	return indexRelation->rd_indam->aminsert(indexRelation, values, isnull,
 											 heap_t_ctid, heapRelation,
 											 checkUnique, indexInfo);
+#endif
 }
 
 /*

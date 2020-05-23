@@ -41,6 +41,16 @@ static OffsetNumber _bt_findinsertloc(Relation rel,
 									  BTStack stack,
 									  Relation heapRel);
 static void _bt_stepright(Relation rel, BTInsertState insertstate, BTStack stack);
+#ifdef SCSLAB_CVC
+static void _bt_insertonpg(Relation rel, BTScanInsert itup_key,
+						   Buffer buf,
+						   Buffer cbuf,
+						   BTStack stack,
+						   IndexTuple itup,
+						   OffsetNumber newitemoff,
+						   bool split_only_page,
+						   bool inplaceUpdate);
+#else
 static void _bt_insertonpg(Relation rel, BTScanInsert itup_key,
 						   Buffer buf,
 						   Buffer cbuf,
@@ -48,6 +58,7 @@ static void _bt_insertonpg(Relation rel, BTScanInsert itup_key,
 						   IndexTuple itup,
 						   OffsetNumber newitemoff,
 						   bool split_only_page);
+#endif
 static Buffer _bt_split(Relation rel, BTScanInsert itup_key, Buffer buf,
 						Buffer cbuf, OffsetNumber newitemoff, Size newitemsz,
 						IndexTuple newitem);
@@ -55,6 +66,10 @@ static void _bt_insert_parent(Relation rel, Buffer buf, Buffer rbuf,
 							  BTStack stack, bool is_root, bool is_only);
 static bool _bt_pgaddtup(Page page, Size itemsize, IndexTuple itup,
 						 OffsetNumber itup_off);
+#ifdef SCSLAB_CVC
+static bool _bt_pgaddtup_inplace(Page page, Size itemsize, IndexTuple itup,
+						 OffsetNumber itup_off);
+#endif
 static void _bt_vacuum_one_page(Relation rel, Buffer buffer, Relation heapRel);
 
 /*
@@ -75,9 +90,16 @@ static void _bt_vacuum_one_page(Relation rel, Buffer buffer, Relation heapRel);
  *		successful UNIQUE_CHECK_YES or UNIQUE_CHECK_EXISTING call, but
  *		that's just a coding artifact.)
  */
+#ifdef SCSLAB_CVC
+bool
+_bt_doinsert(Relation rel, IndexTuple itup,
+			 IndexUniqueCheck checkUnique, Relation heapRel,
+			 bool inplaceUpdate)
+#else
 bool
 _bt_doinsert(Relation rel, IndexTuple itup,
 			 IndexUniqueCheck checkUnique, Relation heapRel)
+#endif
 {
 	bool		is_unique = false;
 	BTInsertStateData insertstate;
@@ -248,6 +270,15 @@ top:
 	{
 		TransactionId xwait;
 		uint32		speculativeToken;
+#ifdef SCSLAB_CVC
+		if (VersionChainIsNewToOld(heapRel) && inplaceUpdate) {
+			/*
+			 * TODO: Need to check whether there is an index entry
+			 * when inplace update.
+			 */
+			goto skip;
+		}
+#endif
 
 		xwait = _bt_check_unique(rel, &insertstate, heapRel, checkUnique,
 								 &is_unique, &speculativeToken);
@@ -273,6 +304,9 @@ top:
 				_bt_freestack(stack);
 			goto top;
 		}
+#ifdef SCSLAB_CVC
+skip:
+#endif
 
 		/* Uniqueness is established -- restore heap tid as scantid */
 		if (itup_key->heapkeyspace)
@@ -299,8 +333,23 @@ top:
 		 */
 		newitemoff = _bt_findinsertloc(rel, &insertstate, checkingunique,
 									   stack, heapRel);
+#ifdef SCSLAB_CVC
+		if (VersionChainIsNewToOld(rel) && inplaceUpdate) {
+			/* Only one index entry for one record */
+#ifdef SCSLAB_CVC_VERBOSE
+			elog(WARNING, "[SCSLAB_CVC] _bt_doinsert\n%s",
+					RelationGetRelationName(rel));
+#endif
+			_bt_insertonpg(rel, itup_key, insertstate.buf, InvalidBuffer, stack,
+						   itup, newitemoff, false, true); /* overwrite */
+		} else {
+			_bt_insertonpg(rel, itup_key, insertstate.buf, InvalidBuffer, stack,
+						   itup, newitemoff, false, false);
+		}
+#else
 		_bt_insertonpg(rel, itup_key, insertstate.buf, InvalidBuffer, stack,
 					   itup, newitemoff, false);
+#endif
 	}
 	else
 	{
@@ -559,6 +608,10 @@ _bt_check_unique(Relation rel, BTInsertState insertstate, Relation heapRel,
 
 						key_desc = BuildIndexValueDescription(rel, values,
 															  isnull);
+#ifdef SCSLAB_CVC
+						elog(WARNING, "[SCSLAB_CVC] error %s", RelationGetRelationName(rel));
+						elog(WARNING, "[SCSLAB_CVC] error %s", RelationGetRelationName(heapRel));
+#endif
 
 						ereport(ERROR,
 								(errcode(ERRCODE_UNIQUE_VIOLATION),
@@ -928,6 +981,18 @@ _bt_stepright(Relation rel, BTInsertState insertstate, BTStack stack)
  *		INCOMPLETE_SPLIT flag on it, and release the buffer.
  *----------
  */
+#ifdef SCSLAB_CVC
+static void
+_bt_insertonpg(Relation rel,
+			   BTScanInsert itup_key,
+			   Buffer buf,
+			   Buffer cbuf,
+			   BTStack stack,
+			   IndexTuple itup,
+			   OffsetNumber newitemoff,
+			   bool split_only_page,
+			   bool inplaceUpdate)
+#else
 static void
 _bt_insertonpg(Relation rel,
 			   BTScanInsert itup_key,
@@ -937,6 +1002,7 @@ _bt_insertonpg(Relation rel,
 			   IndexTuple itup,
 			   OffsetNumber newitemoff,
 			   bool split_only_page)
+#endif
 {
 	Page		page;
 	BTPageOpaque lpageop;
@@ -971,7 +1037,11 @@ _bt_insertonpg(Relation rel,
 	 * so this comparison is correct even though we appear to be accounting
 	 * only for the item and not for its line pointer.
 	 */
+#ifdef SCSLAB_CVC
+	if (!inplaceUpdate && PageGetFreeSpace(page) < itemsz)
+#else
 	if (PageGetFreeSpace(page) < itemsz)
+#endif
 	{
 		bool		is_root = P_ISROOT(lpageop);
 		bool		is_only = P_LEFTMOST(lpageop) && P_RIGHTMOST(lpageop);
@@ -1071,9 +1141,22 @@ _bt_insertonpg(Relation rel,
 		/* Do the update.  No ereport(ERROR) until changes are logged */
 		START_CRIT_SECTION();
 
+#ifdef SCSLAB_CVC
+		if (inplaceUpdate) {
+			Assert(newitemoff != 0);
+			if (!_bt_pgaddtup_inplace(page, itemsz, itup, newitemoff - 1))
+				elog(PANIC, "[SCSLAB] failed to add new item to block %u in index \"%s\"",
+					 itup_blkno, RelationGetRelationName(rel));
+		} else {
+			if (!_bt_pgaddtup(page, itemsz, itup, newitemoff))
+				elog(PANIC, "failed to add new item to block %u in index \"%s\"",
+					 itup_blkno, RelationGetRelationName(rel));
+		}
+#else
 		if (!_bt_pgaddtup(page, itemsz, itup, newitemoff))
 			elog(PANIC, "failed to add new item to block %u in index \"%s\"",
 				 itup_blkno, RelationGetRelationName(rel));
+#endif
 
 		MarkBufferDirty(buf);
 
@@ -1831,9 +1914,15 @@ _bt_insert_parent(Relation rel,
 				 RelationGetRelationName(rel), bknum, rbknum);
 
 		/* Recursively update the parent */
+#ifdef SCSLAB_CVC
+		_bt_insertonpg(rel, NULL, pbuf, buf, stack->bts_parent,
+					   new_item, stack->bts_offset + 1,
+					   is_only, false);
+#else
 		_bt_insertonpg(rel, NULL, pbuf, buf, stack->bts_parent,
 					   new_item, stack->bts_offset + 1,
 					   is_only);
+#endif
 
 		/* be tidy */
 		pfree(new_item);
@@ -2239,6 +2328,33 @@ _bt_pgaddtup(Page page,
 
 	return true;
 }
+#ifdef SCSLAB_CVC
+static bool
+_bt_pgaddtup_inplace(Page page,
+			 Size itemsize,
+			 IndexTuple itup,
+			 OffsetNumber itup_off)
+{
+	BTPageOpaque opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	IndexTupleData trunctuple;
+
+	if (!P_ISLEAF(opaque) && itup_off == P_FIRSTDATAKEY(opaque))
+	{
+		trunctuple = *itup;
+		trunctuple.t_info = sizeof(IndexTupleData);
+		/* Deliberately zero INDEX_ALT_TID_MASK bits */
+		BTreeTupleSetNAtts(&trunctuple, 0);
+		itup = &trunctuple;
+		itemsize = sizeof(IndexTupleData);
+	}
+
+	if (PageAddItemInplace(page, (Item) itup, itemsize, itup_off)
+			== InvalidOffsetNumber)
+		return false;
+
+	return true;
+}
+#endif
 
 /*
  * _bt_vacuum_one_page - vacuum just one index page.

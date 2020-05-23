@@ -189,11 +189,19 @@ btbuildempty(Relation index)
  *		Descend the tree recursively, find the appropriate location for our
  *		new tuple, and put it there.
  */
+#ifdef SCSLAB_CVC
+bool
+btinsert(Relation rel, Datum *values, bool *isnull,
+		 ItemPointer ht_ctid, Relation heapRel,
+		 IndexUniqueCheck checkUnique,
+		 IndexInfo *indexInfo, bool inplaceUpdate)
+#else
 bool
 btinsert(Relation rel, Datum *values, bool *isnull,
 		 ItemPointer ht_ctid, Relation heapRel,
 		 IndexUniqueCheck checkUnique,
 		 IndexInfo *indexInfo)
+#endif
 {
 	bool		result;
 	IndexTuple	itup;
@@ -202,7 +210,19 @@ btinsert(Relation rel, Datum *values, bool *isnull,
 	itup = index_form_tuple(RelationGetDescr(rel), values, isnull);
 	itup->t_tid = *ht_ctid;
 
+#ifdef SCSLAB_CVC_VERBOSE
+	if (VersionChainIsNewToOld(heapRel)) {
+		elog(WARNING, "[SCSLAB_CVC] btinsert\n%s\n%s\n%s",
+				RelationGetRelationName(rel),
+				RelationGetRelationName(heapRel),
+				inplaceUpdate ? "inplace update" : "insert index entry");
+	}
+#endif
+#ifdef SCSLAB_CVC
+	result = _bt_doinsert(rel, itup, checkUnique, heapRel, inplaceUpdate);
+#else
 	result = _bt_doinsert(rel, itup, checkUnique, heapRel);
+#endif
 
 	pfree(itup);
 

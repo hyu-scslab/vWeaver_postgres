@@ -32,11 +32,20 @@
  *
  * Note - caller must hold BUFFER_LOCK_EXCLUSIVE on the buffer.
  */
+#ifdef SCSLAB_CVC
+void
+RelationPutHeapTuple(Relation relation,
+					 Buffer buffer,
+					 HeapTuple tuple,
+					 bool token,
+					 bool new_record)
+#else
 void
 RelationPutHeapTuple(Relation relation,
 					 Buffer buffer,
 					 HeapTuple tuple,
 					 bool token)
+#endif
 {
 	Page		pageHeader;
 	OffsetNumber offnum;
@@ -70,6 +79,12 @@ RelationPutHeapTuple(Relation relation,
 		HeapTupleHeader item = (HeapTupleHeader) PageGetItem(pageHeader, itemId);
 
 		item->t_ctid = tuple->t_self;
+#ifdef SCSLAB_CVC
+		if (VersionChainIsNewToOld(relation) && new_record) {
+			/* Set t_ctid_prev if the first version. */
+			item->t_ctid_prev = tuple->t_self;
+		}
+#endif
 	}
 }
 

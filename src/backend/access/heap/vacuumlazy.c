@@ -216,6 +216,12 @@ heap_vacuum_rel(Relation onerel, VacuumParams *params,
 	/* not every AM requires these to be valid, but heap does */
 	Assert(TransactionIdIsNormal(onerel->rd_rel->relfrozenxid));
 	Assert(MultiXactIdIsValid(onerel->rd_rel->relminmxid));
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(onerel)) {
+		/* Disable vacuum. */
+		return;
+	}
+#endif
 
 	/* measure elapsed time iff autovacuum logging requires it */
 	if (IsAutoVacuumWorkerProcess() && params->log_min_duration >= 0)

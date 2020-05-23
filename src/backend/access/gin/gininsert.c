@@ -481,11 +481,19 @@ ginHeapTupleInsert(GinState *ginstate, OffsetNumber attnum,
 					   item, 1, NULL);
 }
 
+#ifdef SCSLAB_CVC
+bool
+gininsert(Relation index, Datum *values, bool *isnull,
+		  ItemPointer ht_ctid, Relation heapRel,
+		  IndexUniqueCheck checkUnique,
+		  IndexInfo *indexInfo, bool inplaceUpdate)
+#else
 bool
 gininsert(Relation index, Datum *values, bool *isnull,
 		  ItemPointer ht_ctid, Relation heapRel,
 		  IndexUniqueCheck checkUnique,
 		  IndexInfo *indexInfo)
+#endif
 {
 	GinState   *ginstate = (GinState *) indexInfo->ii_AmCache;
 	MemoryContext oldCtx;

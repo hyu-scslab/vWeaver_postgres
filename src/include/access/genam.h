@@ -138,12 +138,22 @@ typedef struct IndexOrderByDistance
 extern Relation index_open(Oid relationId, LOCKMODE lockmode);
 extern void index_close(Relation relation, LOCKMODE lockmode);
 
+#ifdef SCSLAB_CVC
+extern bool index_insert(Relation indexRelation,
+						 Datum *values, bool *isnull,
+						 ItemPointer heap_t_ctid,
+						 Relation heapRelation,
+						 IndexUniqueCheck checkUnique,
+						 struct IndexInfo *indexInfo,
+						 bool inplaceUpdate);
+#else
 extern bool index_insert(Relation indexRelation,
 						 Datum *values, bool *isnull,
 						 ItemPointer heap_t_ctid,
 						 Relation heapRelation,
 						 IndexUniqueCheck checkUnique,
 						 struct IndexInfo *indexInfo);
+#endif
 
 extern IndexScanDesc index_beginscan(Relation heapRelation,
 									 Relation indexRelation,

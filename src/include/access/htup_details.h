@@ -159,6 +159,12 @@ struct HeapTupleHeaderData
 
 	ItemPointerData t_ctid;		/* current TID of this or newer tuple (or a
 								 * speculative insertion token) */
+#ifdef SCSLAB_CVC
+	/*
+	 * TID of older tuple
+	 */
+	ItemPointerData t_ctid_prev;
+#endif
 
 	/* Fields below here must match MinimalTupleData! */
 

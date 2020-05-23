@@ -203,11 +203,19 @@ spgbuildempty(Relation index)
 /*
  * Insert one new tuple into an SPGiST index.
  */
+#ifdef SCSLAB_CVC
+bool
+spginsert(Relation index, Datum *values, bool *isnull,
+		  ItemPointer ht_ctid, Relation heapRel,
+		  IndexUniqueCheck checkUnique,
+		  IndexInfo *indexInfo, bool inplaceUpdate)
+#else
 bool
 spginsert(Relation index, Datum *values, bool *isnull,
 		  ItemPointer ht_ctid, Relation heapRel,
 		  IndexUniqueCheck checkUnique,
 		  IndexInfo *indexInfo)
+#endif
 {
 	SpGistState spgstate;
 	MemoryContext oldCtx;

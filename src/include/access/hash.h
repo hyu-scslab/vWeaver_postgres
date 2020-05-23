@@ -345,10 +345,17 @@ typedef HashMetaPageData *HashMetaPage;
 extern IndexBuildResult *hashbuild(Relation heap, Relation index,
 								   struct IndexInfo *indexInfo);
 extern void hashbuildempty(Relation index);
+#ifdef SCSLAB_CVC
+extern bool hashinsert(Relation rel, Datum *values, bool *isnull,
+					   ItemPointer ht_ctid, Relation heapRel,
+					   IndexUniqueCheck checkUnique,
+					   struct IndexInfo *indexInfo, bool inplaceUpdate);
+#else
 extern bool hashinsert(Relation rel, Datum *values, bool *isnull,
 					   ItemPointer ht_ctid, Relation heapRel,
 					   IndexUniqueCheck checkUnique,
 					   struct IndexInfo *indexInfo);
+#endif
 extern bool hashgettuple(IndexScanDesc scan, ScanDirection dir);
 extern int64 hashgetbitmap(IndexScanDesc scan, TIDBitmap *tbm);
 extern IndexScanDesc hashbeginscan(Relation rel, int nkeys, int norderbys);
