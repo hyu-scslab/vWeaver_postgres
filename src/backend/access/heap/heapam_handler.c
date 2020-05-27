@@ -126,41 +126,41 @@ heapam_index_fetch_tuple_for_cvc(
 	IndexFetchHeapData *hscan = (IndexFetchHeapData *) scan;
 	BufferHeapTupleTableSlot *bslot = (BufferHeapTupleTableSlot *) slot;
 	bool			got_heap_tuple = false;
+	bool			same_page;
 
 	Relation		relation = hscan->xs_base.rel;
 	ItemPointerData	ctid;
 	TransactionId	priorXmin;
 
+	Buffer			buffer;
+	Page			page;
 
 	Assert(TTS_IS_BUFFERTUPLE(slot));
 
-
-#ifdef SCSLAB_CVC_VERBOSE
-	elog(WARNING, "[SCSLAB_CVC] heapam_index_fetch_tuple_for_cvc\n%s",
-			RelationGetRelationName(hscan->xs_base.rel));
-#endif
-
-
 	ctid = *tid;
 	priorXmin = InvalidTransactionId;
+	same_page = false;
 
 	for (;;)
 	{
-		Buffer			buffer;
-		Page			page;
 		OffsetNumber	offnum;
 		ItemId			lp;
 		HeapTuple		heapTuple = &bslot->base.tupdata;
 		bool			valid;
 		ItemPointerData	prev_ctid;
 
-		/*
-		 * Read, pin, and lock the page.
-		 */
-		buffer = ReadBuffer(relation, ItemPointerGetBlockNumber(&ctid));
-		LockBuffer(buffer, BUFFER_LOCK_SHARE);
-		page = BufferGetPage(buffer);
-		TestForOldSnapshot(snapshot, relation, page);
+		if (!same_page) {
+			/*
+			 * Read, pin, and lock the page.
+			 */
+			buffer = ReadBuffer(relation, ItemPointerGetBlockNumber(&ctid));
+
+			/* Optionally vacuum this page */
+			heap_page_prune_opt(relation, buffer);
+
+			LockBuffer(buffer, BUFFER_LOCK_SHARE);
+			page = BufferGetPage(buffer);
+		}
 
 		/*
 		 * Check for bogus item number.  This is not treated as an error
@@ -186,15 +186,6 @@ heapam_index_fetch_tuple_for_cvc(
 		heapTuple->t_len = ItemIdGetLength(lp);
 		heapTuple->t_tableOid = RelationGetRelid(relation);
 
-#ifdef SCSLAB_CVC_VERBOSE
-		elog(WARNING, "[SCSLAB_CVC]\n"
-				"block num, offset num : (%u, %u)\n%s\n"
-				"xmin : %d",
-				ItemPointerGetBlockNumber(&ctid),
-				ItemPointerGetOffsetNumber(&ctid),
-				RelationGetRelationName(hscan->xs_base.rel),
-				HeapTupleHeaderGetXmin(heapTuple->t_data));
-#endif
 		/*
 		 * After following a t_ctid link, we might arrive at an unrelated
 		 * tuple.  Check for XMIN match.
@@ -202,9 +193,6 @@ heapam_index_fetch_tuple_for_cvc(
 		if (TransactionIdIsValid(priorXmin) &&
 			!TransactionIdEquals(priorXmin, HeapTupleHeaderGetUpdateXid(heapTuple->t_data)))
 		{
-#ifdef SCSLAB_CVC_VERBOSE
-			elog(WARNING, "[SCSLAB_CVC] unrelated tuple!!!");
-#endif
 			UnlockReleaseBuffer(buffer);
 			break;
 		}
@@ -218,10 +206,6 @@ heapam_index_fetch_tuple_for_cvc(
 		CheckForSerializableConflictOut(valid, relation, heapTuple, buffer, snapshot);
 		if (valid)
 		{
-#ifdef SCSLAB_CVC_VERBOSE
-			elog(WARNING, "[SCSLAB_CVC] visible version %s",
-				RelationGetRelationName(hscan->xs_base.rel));
-#endif
 			got_heap_tuple = true;
 			*tid = ctid;
 			//PredicateLockTuple(relation, heapTuple, snapshot);
@@ -230,25 +214,24 @@ heapam_index_fetch_tuple_for_cvc(
 			UnlockReleaseBuffer(buffer);
 			break;
 		}
-#ifdef SCSLAB_CVC_VERBOSE
-		elog(WARNING, "[SCSLAB_CVC] invisible version %s",
-			RelationGetRelationName(hscan->xs_base.rel));
-#endif
 
 		prev_ctid = heapTuple->t_data->t_ctid_prev;
 		if (ItemPointerGetBlockNumber(&ctid) == ItemPointerGetBlockNumber(&prev_ctid)
 				&& ItemPointerGetOffsetNumber(&ctid) == ItemPointerGetOffsetNumber(&prev_ctid))
 		{
-#ifdef SCSLAB_CVC_VERBOSE
-			elog(WARNING, "[SCSLAB_CVC] ctid == prev_ctid");
-#endif
 			ExecStoreBufferHeapTuple(heapTuple, slot, buffer);
 			UnlockReleaseBuffer(buffer);
 			break;
 		}
+
+		if (ItemPointerGetBlockNumber(&ctid) == ItemPointerGetBlockNumber(&prev_ctid)) {
+			same_page = true;
+		} else {
+			same_page = false;
+			UnlockReleaseBuffer(buffer);
+		}
 		ctid = prev_ctid;
 		priorXmin = HeapTupleHeaderGetXmin(heapTuple->t_data);
-		UnlockReleaseBuffer(buffer);
 	}
 
 	*call_again = false;

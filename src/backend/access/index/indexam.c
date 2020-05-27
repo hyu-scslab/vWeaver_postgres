@@ -196,13 +196,6 @@ index_insert(Relation indexRelation,
 									   InvalidBuffer);
 
 #ifdef SCSLAB_CVC
-#ifdef SCSLAB_CVC_VERBOSE
-	if (VersionChainIsNewToOld(heapRelation)) {
-		elog(WARNING, "[SCSLAB_CVC] index_insert\n%s\n%s",
-				RelationGetRelationName(indexRelation),
-				RelationGetRelationName(heapRelation));
-	}
-#endif
 	return indexRelation->rd_indam->aminsert(indexRelation, values, isnull,
 											 heap_t_ctid, heapRelation,
 											 checkUnique, indexInfo,

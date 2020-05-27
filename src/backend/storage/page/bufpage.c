@@ -349,7 +349,6 @@ PageAddItemInplace(Page page,
 					OffsetNumber offsetNumber)
 {
 	PageHeader	phdr = (PageHeader) page;
-	Size		alignedSize;
 	ItemId		itemId;
 	OffsetNumber limit;
 
@@ -367,11 +366,7 @@ PageAddItemInplace(Page page,
 
 	Assert(OffsetNumberIsValid(offsetNumber));
 
-	/*
-	 * Select offsetNumber to place the new item at
-	 */
 	limit = OffsetNumberNext(PageGetMaxOffsetNumber(page));
-
 
 	/* Reject placing items beyond the first unused line pointer */
 	if (offsetNumber > limit)
@@ -380,34 +375,17 @@ PageAddItemInplace(Page page,
 		return InvalidOffsetNumber;
 	}
 
-	/* Assume fitted size. */
-	/*
-	 * Compute new lower and upper pointers for page, see if it'll fit.
-	 *
-	 * Note: do arithmetic as signed ints, to avoid mistakes if, say,
-	 * alignedSize > pd_upper.
-	 */
-
-	alignedSize = MAXALIGN(size);
-
-
-
-	/*
-	 * OK to insert the item.  First, shuffle the existing pointers if needed.
-	 */
 	itemId = PageGetItemId(phdr, offsetNumber);
 
-	Assert(alignedSize == itemId->lp_len);
+	Assert(ItemIdIsUsed(itemId));
+	Assert(ItemIdHasStorage(itemId));
 
-#ifdef SCSLAB_CVC_VERBOSE
-	elog(WARNING, "[SCSLAB_CVC] PageAddItemInplace\n"
-			"index entry line pointer offset : %8d\n"
-			"entry data offset               : %8d",
-			offsetNumber,
-			ItemIdGetOffset(itemId));
-#endif
-	/* copy the item's data onto the page */
-	memcpy((char *) page + ItemIdGetOffset(itemId), item, alignedSize);
+
+	/* Assume fitted size. */
+	Assert(size == ItemIdGetLength(itemId));
+
+	/* Copy the item's data onto the page */
+	memcpy((char *) page + ItemIdGetOffset(itemId), item, size);
 
 	return offsetNumber;
 }

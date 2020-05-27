@@ -210,14 +210,6 @@ btinsert(Relation rel, Datum *values, bool *isnull,
 	itup = index_form_tuple(RelationGetDescr(rel), values, isnull);
 	itup->t_tid = *ht_ctid;
 
-#ifdef SCSLAB_CVC_VERBOSE
-	if (VersionChainIsNewToOld(heapRel)) {
-		elog(WARNING, "[SCSLAB_CVC] btinsert\n%s\n%s\n%s",
-				RelationGetRelationName(rel),
-				RelationGetRelationName(heapRel),
-				inplaceUpdate ? "inplace update" : "insert index entry");
-	}
-#endif
 #ifdef SCSLAB_CVC
 	result = _bt_doinsert(rel, itup, checkUnique, heapRel, inplaceUpdate);
 #else

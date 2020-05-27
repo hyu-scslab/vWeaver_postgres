@@ -228,8 +228,13 @@ cost_seqscan(Path *path, PlannerInfo *root,
 	else
 		path->rows = baserel->rows;
 
+#ifdef SCSLAB_CVC
+	/* Disable seq scan. */
+	startup_cost += disable_cost;
+#else
 	if (!enable_seqscan)
 		startup_cost += disable_cost;
+#endif
 
 	/* fetch estimated page cost for tablespace containing table */
 	get_tablespace_page_costs(baserel->reltablespace,
@@ -965,8 +970,13 @@ cost_bitmap_heap_scan(Path *path, PlannerInfo *root, RelOptInfo *baserel,
 	else
 		path->rows = baserel->rows;
 
+#ifdef SCSLAB_CVC
+	/* Disable bitmap scan. */
+	startup_cost += disable_cost;
+#else
 	if (!enable_bitmapscan)
 		startup_cost += disable_cost;
+#endif
 
 	pages_fetched = compute_bitmap_pages(root, baserel, bitmapqual,
 										 loop_count, &indexTotalCost,

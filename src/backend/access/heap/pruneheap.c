@@ -47,6 +47,12 @@ static int	heap_prune_chain(Relation relation, Buffer buffer,
 							 OffsetNumber rootoffnum,
 							 TransactionId OldestXmin,
 							 PruneState *prstate);
+#ifdef SCSLAB_CVC
+static int	heap_prune_one(Relation relation, Buffer buffer,
+							 OffsetNumber rootoffnum,
+							 TransactionId OldestXmin,
+							 PruneState *prstate);
+#endif
 static void heap_prune_record_prunable(PruneState *prstate, TransactionId xid);
 static void heap_prune_record_redirect(PruneState *prstate,
 									   OffsetNumber offnum, OffsetNumber rdoffnum);
@@ -186,12 +192,6 @@ heap_page_prune(Relation relation, Buffer buffer, TransactionId OldestXmin,
 				maxoff;
 	PruneState	prstate;
 
-#ifdef SCSLAB_CVC
-	if (VersionChainIsNewToOld(relation)) {
-		/* Heap page pruning disable. */
-		return 0;
-	}
-#endif
 	/*
 	 * Our strategy is to scan the page and make lists of items to change,
 	 * then apply the changes within a critical section.  This keeps as much
@@ -225,10 +225,23 @@ heap_page_prune(Relation relation, Buffer buffer, TransactionId OldestXmin,
 		if (!ItemIdIsUsed(itemid) || ItemIdIsDead(itemid))
 			continue;
 
+#ifdef SCSLAB_CVC
+		if (VersionChainIsNewToOld(relation)) {
+			ndeleted += heap_prune_one(relation, buffer, offnum,
+										 OldestXmin,
+										 &prstate);
+		} else {
+			/* Process this item or chain of items */
+			ndeleted += heap_prune_chain(relation, buffer, offnum,
+										 OldestXmin,
+										 &prstate);
+		}
+#else
 		/* Process this item or chain of items */
 		ndeleted += heap_prune_chain(relation, buffer, offnum,
 									 OldestXmin,
 									 &prstate);
+#endif
 	}
 
 	/* Any error while applying the changes is critical */
@@ -621,6 +634,81 @@ heap_prune_chain(Relation relation, Buffer buffer, OffsetNumber rootoffnum,
 
 	return ndeleted;
 }
+#ifdef SCSLAB_CVC
+static int
+heap_prune_one(Relation relation, Buffer buffer, OffsetNumber offnum,
+				 TransactionId OldestXmin,
+				 PruneState *prstate)
+{
+	int			ndeleted = 0;
+	Page		dp = (Page) BufferGetPage(buffer);
+	ItemId		lp;
+	HeapTupleHeader htup;
+	HeapTupleData tup;
+
+	tup.t_tableOid = RelationGetRelid(relation);
+
+	lp = PageGetItemId(dp, offnum);
+
+	Assert(!ItemIdIsRedirected(lp));
+
+	/*
+	 * If it's a heap-only tuple, then it is not the start of a HOT chain.
+	 */
+	if (!ItemIdIsNormal(lp)) {
+		return 0;
+	}
+
+
+	htup = (HeapTupleHeader) PageGetItem(dp, lp);
+
+	tup.t_data = htup;
+	tup.t_len = ItemIdGetLength(lp);
+	ItemPointerSet(&(tup.t_self), BufferGetBlockNumber(buffer), offnum);
+
+	if (HeapTupleHeaderIsHeapOnly(htup))
+	{
+		/*
+		 * If the tuple is DEAD and doesn't chain to anything else, mark
+		 * it unused immediately.  (If it does chain, we can only remove
+		 * it as part of pruning its chain.)
+		 *
+		 * We need this primarily to handle aborted HOT updates, that is,
+		 * XMIN_INVALID heap-only tuples.  Those might not be linked to by
+		 * any chain, since the parent tuple might be re-updated before
+		 * any pruning occurs.  So we have to be able to reap them
+		 * separately from chain-pruning.  (Note that
+		 * HeapTupleHeaderIsHotUpdated will never return true for an
+		 * XMIN_INVALID tuple, so this code will work even when there were
+		 * sequential updates within the aborted transaction.)
+		 *
+		 * Note that we might first arrive at a dead heap-only tuple
+		 * either here or while following a chain below.  Whichever path
+		 * gets there first will mark the tuple unused.
+		 */
+		if (HeapTupleSatisfiesVacuum(&tup, OldestXmin, buffer)
+			== HEAPTUPLE_DEAD && !HeapTupleHeaderIsHotUpdated(htup))
+		{
+			heap_prune_record_unused(prstate, offnum);
+			HeapTupleHeaderAdvanceLatestRemovedXid(htup,
+												   &prstate->latestRemovedXid);
+			ndeleted++;
+		}
+
+		/* Nothing more to do */
+		return ndeleted;
+	}
+
+	/* This version might be pointed by index. */
+	if (HeapTupleSatisfiesVacuum(&tup, OldestXmin, buffer)
+		== HEAPTUPLE_DEAD) {
+		heap_prune_record_dead(prstate, offnum);
+	}
+
+
+	return ndeleted;
+}
+#endif
 
 /* Record lowest soon-prunable XID */
 static void

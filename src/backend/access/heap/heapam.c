@@ -1873,12 +1873,6 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 	Buffer		buffer;
 	Buffer		vmbuffer = InvalidBuffer;
 	bool		all_visible_cleared = false;
-#ifdef SCSLAB_CVC_VERBOSE
-	if (VersionChainIsNewToOld(relation)) {
-		elog(WARNING, "[SCSLAB_CVC] heap_insert\n%s",
-				RelationGetRelationName(relation));
-	}
-#endif
 
 	/*
 	 * Fill in tuple header fields and toast the tuple if necessary.
@@ -3652,6 +3646,31 @@ l2:
 	 */
 	PageSetPrunable(page, xid);
 
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(relation)) {
+		HeapTupleSetHeapOnly(&oldtup);
+		HeapTupleClearHotUpdated(&oldtup);
+		HeapTupleClearHeapOnly(heaptup);
+		HeapTupleClearHeapOnly(newtup);
+	} else {
+		if (use_hot_update)
+		{
+			/* Mark the old tuple as HOT-updated */
+			HeapTupleSetHotUpdated(&oldtup);
+			/* And mark the new tuple as heap-only */
+			HeapTupleSetHeapOnly(heaptup);
+			/* Mark the caller's copy too, in case different from heaptup */
+			HeapTupleSetHeapOnly(newtup);
+		}
+		else
+		{
+			/* Make sure tuples are correctly marked as not-HOT */
+			HeapTupleClearHotUpdated(&oldtup);
+			HeapTupleClearHeapOnly(heaptup);
+			HeapTupleClearHeapOnly(newtup);
+		}
+	}
+#else
 	if (use_hot_update)
 	{
 		/* Mark the old tuple as HOT-updated */
@@ -3668,6 +3687,7 @@ l2:
 		HeapTupleClearHeapOnly(heaptup);
 		HeapTupleClearHeapOnly(newtup);
 	}
+#endif
 #ifdef SCSLAB_CVC
 	/* Link new to old. */
 	heaptup->t_data->t_ctid_prev = oldtup.t_self;
@@ -3675,19 +3695,6 @@ l2:
 
 #ifdef SCSLAB_CVC
 	RelationPutHeapTuple(relation, newbuf, heaptup, false, false); /* insert new tuple */
-#ifdef SCSLAB_CVC_VERBOSE
-	if (VersionChainIsNewToOld(relation)) {
-		elog(WARNING, "[SCSLAB_CVC] heap update\n"
-				"heap block num, offset num : (%u, %u)\n"
-				"xmin : %d\n"
-				"old version :                (%u, %u)",
-				ItemPointerGetBlockNumber(&heaptup->t_self),
-				ItemPointerGetOffsetNumber(&heaptup->t_self),
-				HeapTupleHeaderGetXmin(heaptup->t_data),
-				ItemPointerGetBlockNumber(&heaptup->t_data->t_ctid_prev),
-				ItemPointerGetOffsetNumber(&heaptup->t_data->t_ctid_prev));
-	}
-#endif
 #else
 	RelationPutHeapTuple(relation, newbuf, heaptup, false); /* insert new tuple */
 #endif
