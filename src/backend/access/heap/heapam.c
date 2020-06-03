@@ -104,6 +104,12 @@ static bool ConditionalMultiXactIdWait(MultiXactId multi, MultiXactStatus status
 static XLogRecPtr log_heap_new_cid(Relation relation, HeapTuple tup);
 static HeapTuple ExtractReplicaIdentity(Relation rel, HeapTuple tup, bool key_modified,
 										bool *copy);
+#ifdef SCSLAB_CVC
+static void find_vRidge_target(Relation relation, Level level,
+		TransactionId current_xid, ItemPointerData current_ptr,
+		Level current_level, TransactionId *find_xid, ItemPointerData *find_ptr,
+		Level *find_level);
+#endif
 
 
 /*
@@ -2892,6 +2898,111 @@ simple_heap_delete(Relation relation, ItemPointer tid)
 	}
 }
 
+#ifdef SCSLAB_CVC
+void
+find_vRidge_target(
+		Relation			relation,
+		Level 				level,
+		TransactionId		current_xid,
+		ItemPointerData		current_ptr,
+		Level				current_level,
+		TransactionId		*find_xid,
+		ItemPointerData		*find_ptr,
+		Level				*find_level)
+{
+	Buffer			buffer;
+	Page			page;
+	OffsetNumber	offnum;
+	ItemId			lp;
+	TransactionId	prior_xid;
+	bool			invalid;
+
+	prior_xid = current_xid;
+
+	for (;;)
+	{
+		HeapTupleData	heap_tuple;
+
+		if (LevelIsInvalid(current_level)
+				|| !TransactionIdIsValid(current_xid)
+				|| !ItemPointerIsValid(&current_ptr)) {
+			invalid = true;
+			break;
+		}
+
+		if (LevelIsUpper(current_level, level)) {
+			/* Ok. We find it. */
+			invalid = false;
+			break;
+		}
+
+		/* Read, pin, and lock the page. */
+		buffer = ReadBuffer(relation, ItemPointerGetBlockNumber(&current_ptr));
+		LockBuffer(buffer, BUFFER_LOCK_SHARE);
+		page = BufferGetPage(buffer);
+
+		offnum = ItemPointerGetOffsetNumber(&current_ptr);
+		if (offnum < FirstOffsetNumber || offnum > PageGetMaxOffsetNumber(page))
+		{
+			/* Maybe vacuum? or something? */
+			invalid = true;
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		lp = PageGetItemId(page, offnum);
+		if (!ItemIdIsNormal(lp))
+		{
+			/* Maybe vacuum? or something? */
+			invalid = true;
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		/* OK to access the tuple. */
+		heap_tuple.t_self = current_ptr;
+		heap_tuple.t_data = (HeapTupleHeader) PageGetItem(page, lp);
+		heap_tuple.t_len = ItemIdGetLength(lp);
+		heap_tuple.t_tableOid = RelationGetRelid(relation);
+
+		/*
+		 * After following a t_ctid link, we might arrive at an unrelated
+		 * tuple.  Check for XMIN match.
+		 */
+		if (TransactionIdIsValid(prior_xid) &&
+			!TransactionIdEquals(prior_xid,
+				HeapTupleHeaderGetXmin(heap_tuple.t_data)))
+		{
+			/* Maybe vacuum? or something? */
+			invalid = true;
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		prior_xid = current_xid;
+
+		/* Maybe?? safe tuple??? */
+		current_xid = heap_tuple.t_data->t_vRidge_xid;
+		current_ptr = heap_tuple.t_data->t_vRidge_ptr;
+		current_level = heap_tuple.t_data->t_vRidge_level;
+
+		UnlockReleaseBuffer(buffer);
+	}
+
+	if (invalid)
+	{
+		current_xid = InvalidTransactionId;
+		ItemPointerSetInvalid(&current_ptr);
+		current_level = InvalidLevel;
+	}
+
+	*find_xid = current_xid;
+	*find_ptr = current_ptr;
+	*find_level = current_level;
+
+	return;
+}
+#endif
 /*
  *	heap_update - replace a tuple
  *
@@ -2945,6 +3056,20 @@ heap_update(Relation relation, ItemPointer otid, HeapTuple newtup,
 				infomask2_old_tuple,
 				infomask_new_tuple,
 				infomask2_new_tuple;
+#ifdef SCSLAB_CVC
+	TransactionId	oldtup_vRidge_xid;
+	ItemPointerData	oldtup_vRidge_ptr;
+	Level			oldtup_vRidge_level;
+	Level			oldtup_level;
+
+	TransactionId	newtup_vRidge_xid;
+	ItemPointerData	newtup_vRidge_ptr;
+	Level			newtup_vRidge_level;
+	Level			newtup_level;
+
+	TransactionId	oldtup_xid;
+	ItemPointerData	oldtup_ptr;
+#endif
 
 	Assert(ItemPointerIsValid(otid));
 
@@ -3648,6 +3773,11 @@ l2:
 
 #ifdef SCSLAB_CVC
 	if (VersionChainIsNewToOld(relation)) {
+		/*
+		 * HeapOnly flag means it is safe to make the lp_flage of this tuple
+		 * LP_UNUSED in vacuum phase because any index entry does not point
+		 * this tuple after current transaction is committed successfully.
+		 */
 		HeapTupleSetHeapOnly(&oldtup);
 		HeapTupleClearHotUpdated(&oldtup);
 		HeapTupleClearHeapOnly(heaptup);
@@ -3694,7 +3824,8 @@ l2:
 #endif
 
 #ifdef SCSLAB_CVC
-	RelationPutHeapTuple(relation, newbuf, heaptup, false, false); /* insert new tuple */
+	/* insert new tuple */
+	RelationPutHeapTuple(relation, newbuf, heaptup, false, false);
 #else
 	RelationPutHeapTuple(relation, newbuf, heaptup, false); /* insert new tuple */
 #endif
@@ -3712,6 +3843,15 @@ l2:
 
 	/* record address of new tuple in t_ctid of old one */
 	oldtup.t_data->t_ctid = heaptup->t_self;
+#ifdef SCSLAB_CVC
+	oldtup_vRidge_xid = oldtup.t_data->t_vRidge_xid;
+	oldtup_vRidge_ptr = oldtup.t_data->t_vRidge_ptr;
+	oldtup_vRidge_level = oldtup.t_data->t_vRidge_level;
+
+	oldtup_xid = HeapTupleHeaderGetXmin(oldtup.t_data);
+	oldtup_ptr = oldtup.t_self;
+	oldtup_level = oldtup.t_data->t_level;
+#endif
 
 	/* clear PD_ALL_VISIBLE flags, reset all visibilitymap bits */
 	if (PageIsAllVisible(BufferGetPage(buffer)))
@@ -3784,6 +3924,80 @@ l2:
 		ReleaseBuffer(vmbuffer_new);
 	if (BufferIsValid(vmbuffer))
 		ReleaseBuffer(vmbuffer);
+#ifdef SCSLAB_CVC
+	/*
+	 * Linking vRidge jobs play here because we might traverse multiple blocks
+	 * and order of latching blocks must be sequential on PostgreSQL.
+	 * During latching old & new tuple's buffer, it would be hard to maintain
+	 * the order restriction, so we do the jobs after all latch is released.
+	 */
+
+	/*
+	 * And we don't write redo log for vRidge because this vRidge will be
+	 * not used after crash-recovery.
+	 */
+
+	/*
+	 * Build vRidge.
+	 */
+	if (VersionChainIsNewToOld(relation))
+	{
+		Page			page;
+		Buffer			buffer;
+		OffsetNumber	offnum;
+		ItemId			lp;
+		HeapTupleData	heap_tuple;
+		Coin			coin;
+
+		coin = CoinToss();
+
+		if (CoinIsFront(coin))
+		{
+			/* FRONT. upper level */
+			newtup_level = LevelNextUpper(oldtup_level);
+
+			/* Let's find vRidge target!! */
+			find_vRidge_target(
+					relation,
+					newtup_level,
+					oldtup_vRidge_xid,
+					oldtup_vRidge_ptr,
+					oldtup_vRidge_level,
+					&newtup_vRidge_xid,
+					&newtup_vRidge_ptr,
+					&newtup_vRidge_level);
+		}
+		else
+		{
+			/* BACKWARD. level 1 */
+			newtup_level = LowestLevel;
+			newtup_vRidge_xid = oldtup_xid;
+			newtup_vRidge_ptr = oldtup_ptr;
+			newtup_vRidge_level = oldtup_level;
+		}
+
+		/* Latch the buffer containing the new tuple. */
+		buffer = ReadBuffer(relation,
+				ItemPointerGetBlockNumber(&heaptup->t_self));
+		LockBuffer(buffer, BUFFER_LOCK_EXCLUSIVE);
+		page = BufferGetPage(buffer);
+
+		offnum = ItemPointerGetOffsetNumber(&heaptup->t_self);
+		lp = PageGetItemId(page, offnum);
+
+		/* OK to access the tuple. */
+		heap_tuple.t_data = (HeapTupleHeader) PageGetItem(page, lp);
+
+		heap_tuple.t_data->t_level = newtup_level;
+		heap_tuple.t_data->t_vRidge_ptr = newtup_vRidge_ptr;
+		heap_tuple.t_data->t_vRidge_xid = newtup_vRidge_xid;
+		heap_tuple.t_data->t_vRidge_level = newtup_vRidge_level;
+
+		/* It is not essential to make these fields durable. */
+		/* Don't write redo log. Don't mark dirty. */
+		UnlockReleaseBuffer(buffer);
+	}
+#endif
 
 	/*
 	 * Release the lmgr tuple lock, if we had it.

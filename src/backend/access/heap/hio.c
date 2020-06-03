@@ -83,6 +83,10 @@ RelationPutHeapTuple(Relation relation,
 		if (VersionChainIsNewToOld(relation) && new_record) {
 			/* Set t_ctid_prev if the first version. */
 			item->t_ctid_prev = tuple->t_self;
+			item->t_level = LowestLevel;
+			ItemPointerSetInvalid(&item->t_vRidge_ptr);
+			item->t_vRidge_xid = InvalidTransactionId;
+			item->t_vRidge_level = InvalidLevel;
 		}
 #endif
 	}

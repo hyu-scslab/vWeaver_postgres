@@ -113,16 +113,196 @@ heapam_index_fetch_end(IndexFetchTableData *scan)
 	pfree(hscan);
 }
 #ifdef SCSLAB_CVC
+/*
+ * Get a visible version(tuple) by tranversing with vRidge.
+ * This code refers to heap_get_latest_tid().
+ */
 static bool
-heapam_index_fetch_tuple_for_cvc(
+fetch_visible_tuple_with_vRidge(
 		struct IndexFetchTableData *scan,
 		ItemPointer tid,
 		Snapshot snapshot,
 		TupleTableSlot *slot,
 		bool *call_again, bool *all_dead)
 {
-	/* Get a visible version by tranversing with t_ctid. */
-	/* This code refers to heap_get_latest_tid(). */
+	IndexFetchHeapData *hscan = (IndexFetchHeapData *) scan;
+	BufferHeapTupleTableSlot *bslot = (BufferHeapTupleTableSlot *) slot;
+	bool			got_heap_tuple = false;
+	bool			same_page;
+
+	Relation		relation = hscan->xs_base.rel;
+	ItemPointerData	ctid;
+	TransactionId	expected_xmin;
+	TransactionId	expected_xmax;
+
+	Buffer			buffer;
+	Page			page;
+
+	Assert(TTS_IS_BUFFERTUPLE(slot));
+
+	ctid = *tid;
+	expected_xmin = InvalidTransactionId;
+	expected_xmax = InvalidTransactionId;
+	same_page = false;
+
+
+	for (;;)
+	{
+		OffsetNumber	offnum;
+		ItemId			lp;
+		HeapTuple		heapTuple = &bslot->base.tupdata;
+		bool			valid;
+
+		ItemPointerData	prev_ctid;
+
+		ItemPointerData vRidge_ptr;
+		TransactionId	vRidge_xid;
+
+		ItemPointerData	target_ptr;
+
+		if (!same_page) {
+			/*
+			 * Read, pin, and lock the page.
+			 */
+			buffer = ReadBuffer(relation, ItemPointerGetBlockNumber(&ctid));
+
+			/* Optionally vacuum this page */
+			heap_page_prune_opt(relation, buffer);
+
+			LockBuffer(buffer, BUFFER_LOCK_SHARE);
+			page = BufferGetPage(buffer);
+		}
+
+		/*
+		 * Check for bogus item number.  This is not treated as an error
+		 * condition because it can happen while following a t_ctid
+		 * or vRidge link. We just assume that the this tid is OK and
+		 * return it unchanged.
+		 */
+		offnum = ItemPointerGetOffsetNumber(&ctid);
+		if (offnum < FirstOffsetNumber || offnum > PageGetMaxOffsetNumber(page))
+		{
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+		lp = PageGetItemId(page, offnum);
+		if (!ItemIdIsNormal(lp))
+		{
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		/* OK to access the tuple */
+		heapTuple->t_self = ctid;
+		heapTuple->t_data = (HeapTupleHeader) PageGetItem(page, lp);
+		heapTuple->t_len = ItemIdGetLength(lp);
+		heapTuple->t_tableOid = RelationGetRelid(relation);
+
+		/*
+		 * After following a t_ctid or vRidge link, we might arrive
+		 * at an unrelated tuple. Check for xid match.
+		 */
+		if (TransactionIdIsValid(expected_xmax) &&
+				!TransactionIdEquals(expected_xmax,
+				HeapTupleHeaderGetUpdateXid(heapTuple->t_data)))
+		{
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+		if (TransactionIdIsValid(expected_xmin) &&
+				!TransactionIdEquals(expected_xmin,
+				HeapTupleHeaderGetXmin(heapTuple->t_data)))
+		{
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		/*
+		 * Check tuple visibility; if visible, set it as the new result
+		 * candidate.
+		 */
+		valid = HeapTupleSatisfiesVisibility(heapTuple, snapshot, buffer);
+		CheckForSerializableConflictOut(valid, relation, heapTuple, buffer, snapshot);
+		if (valid)
+		{
+			got_heap_tuple = true;
+			*tid = ctid;
+			ExecStoreBufferHeapTuple(heapTuple, slot, buffer);
+
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		/*
+		 * Check whether this tuple is the first inserted one or not.
+		 * If it is the one, no more chain to traverse.
+		 */
+		prev_ctid = heapTuple->t_data->t_ctid_prev;
+		if (ItemPointerEquals(&ctid, &prev_ctid))
+		{
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		vRidge_ptr = heapTuple->t_data->t_vRidge_ptr;
+		vRidge_xid = heapTuple->t_data->t_vRidge_xid;
+
+		if (TransactionIdIsValid(vRidge_xid) &&
+				XidInMVCCSnapshot(vRidge_xid, snapshot)) {
+			/*
+			 * vRidge-pointing-tuple is invisible for this snapshot.
+			 * It is safe to go there.
+			 */
+			target_ptr = vRidge_ptr;
+			expected_xmin = vRidge_xid;
+			expected_xmax = InvalidTransactionId;
+		}
+		else
+		{
+			/*
+			 * vRidge-pointing-tuple is in-progress for this snapshot.
+			 * It is unsafe to go there.
+			 * Just go one step to prev(older).
+			 * TODO: If we can know the xmax of vRidge-pointer-tuple in here,
+			 *       we can find more tightly visible tuple.
+			 */
+			target_ptr = prev_ctid;
+			expected_xmin = InvalidTransactionId;
+			expected_xmax = HeapTupleHeaderGetXmin(heapTuple->t_data);
+		}
+
+		if (ItemPointerGetBlockNumber(&ctid) ==
+				ItemPointerGetBlockNumber(&target_ptr)) {
+			same_page = true;
+		} else {
+			same_page = false;
+			UnlockReleaseBuffer(buffer);
+		}
+
+		ctid = target_ptr;
+	}
+
+	*call_again = false;
+	if (all_dead)
+	{
+		*all_dead = false;
+	}
+
+	return got_heap_tuple;
+}
+
+/*
+ * Get a visible version(tuple) by tranversing with t_ctid.
+ * This code refers to heap_get_latest_tid().
+ */
+static bool
+fetch_visible_tuple(
+		struct IndexFetchTableData *scan,
+		ItemPointer tid,
+		Snapshot snapshot,
+		TupleTableSlot *slot,
+		bool *call_again, bool *all_dead)
+{
 	IndexFetchHeapData *hscan = (IndexFetchHeapData *) scan;
 	BufferHeapTupleTableSlot *bslot = (BufferHeapTupleTableSlot *) slot;
 	bool			got_heap_tuple = false;
@@ -200,7 +380,6 @@ heapam_index_fetch_tuple_for_cvc(
 		/*
 		 * Check tuple visibility; if visible, set it as the new result
 		 * candidate.
-		 * FIND IT !!!!!!!!!!!!!!!
 		 */
 		valid = HeapTupleSatisfiesVisibility(heapTuple, snapshot, buffer);
 		CheckForSerializableConflictOut(valid, relation, heapTuple, buffer, snapshot);
@@ -208,8 +387,10 @@ heapam_index_fetch_tuple_for_cvc(
 		{
 			got_heap_tuple = true;
 			*tid = ctid;
-			//PredicateLockTuple(relation, heapTuple, snapshot);
+#ifdef SCSLAB_CVC_VALIDATION
+#else
 			ExecStoreBufferHeapTuple(heapTuple, slot, buffer);
+#endif
 
 			UnlockReleaseBuffer(buffer);
 			break;
@@ -219,7 +400,7 @@ heapam_index_fetch_tuple_for_cvc(
 		if (ItemPointerGetBlockNumber(&ctid) == ItemPointerGetBlockNumber(&prev_ctid)
 				&& ItemPointerGetOffsetNumber(&ctid) == ItemPointerGetOffsetNumber(&prev_ctid))
 		{
-			ExecStoreBufferHeapTuple(heapTuple, slot, buffer);
+			/* This tuple is the first inserted tuple. No more chain. */
 			UnlockReleaseBuffer(buffer);
 			break;
 		}
@@ -261,10 +442,30 @@ heapam_index_fetch_tuple(struct IndexFetchTableData *scan,
 	Assert(TTS_IS_BUFFERTUPLE(slot));
 
 #ifdef SCSLAB_CVC
-	if (VersionChainIsNewToOld(relation)) {
-		return heapam_index_fetch_tuple_for_cvc(
-					scan, tid, snapshot,
-					slot, call_again, all_dead);
+	if (VersionChainIsNewToOld(relation))
+	{
+#ifdef SCSLAB_CVC_VALIDATION
+		ItemPointerData	validation_tid;
+		bool			validation_got_heap_tuple;
+
+		validation_tid = *tid;
+
+		validation_got_heap_tuple = fetch_visible_tuple(
+				scan, &validation_tid, snapshot,
+				slot, call_again, all_dead);
+#endif /* SCSLAB_CVC_VALIDATION */
+		got_heap_tuple = fetch_visible_tuple_with_vRidge(
+				scan, tid, snapshot,
+				slot, call_again, all_dead);
+
+#ifdef SCSLAB_CVC_VALIDATION
+		Assert(validation_got_heap_tuple == got_heap_tuple);
+		if (got_heap_tuple == true) {
+			Assert(ItemPointerEquals(&validation_tid, tid));
+		}
+#endif /* SCSLAB_CVC_VALIDATION */
+
+		return got_heap_tuple;
 	}
 #endif
 	/* We can skip the buffer-switching logic if we're in mid-HOT chain. */

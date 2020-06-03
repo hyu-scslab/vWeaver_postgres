@@ -149,6 +149,42 @@ typedef struct DatumTupleFields
 	 */
 } DatumTupleFields;
 
+#ifdef SCSLAB_CVC
+
+typedef enum { COIN_FRONT, COIN_BACK } Coin;
+
+#define COIN_PROBABILITY	(0.5)
+#define COIN_PRECISION		(100000)
+
+#define CoinTossProb(p) \
+( \
+  	(random() % COIN_PRECISION > (p) * COIN_PRECISION) ? \
+	COIN_FRONT \
+	: \
+	COIN_BACK \
+)
+
+#define CoinToss() \
+( \
+  	CoinTossProb(COIN_PROBABILITY) \
+)
+
+#define CoinIsFront(coin)	((coin) == COIN_FRONT)
+#define CoinIsBack(coin)	((coin) == COIN_BACK)
+
+
+
+
+typedef int64_t Level;
+
+#define InvalidLevel			(-1)
+#define LowestLevel				(1)
+
+#define LevelNextUpper(level)	((level) + 1)
+#define LevelIsUpper(l1, l2)	((l1) >= (l2))
+#define LevelIsInvalid(level)	((level) == InvalidLevel)
+
+#endif
 struct HeapTupleHeaderData
 {
 	union
@@ -160,10 +196,18 @@ struct HeapTupleHeaderData
 	ItemPointerData t_ctid;		/* current TID of this or newer tuple (or a
 								 * speculative insertion token) */
 #ifdef SCSLAB_CVC
-	/*
-	 * TID of older tuple
-	 */
+	/* Fields for O2N */
+	/* TID of older tuple */
 	ItemPointerData t_ctid_prev;
+
+	/* Fields for vRidge */
+	Level			t_level;
+
+	ItemPointerData t_vRidge_ptr;
+	TransactionId	t_vRidge_xid;
+	Level			t_vRidge_level;
+
+	/* Fields for shortcut */
 #endif
 
 	/* Fields below here must match MinimalTupleData! */
