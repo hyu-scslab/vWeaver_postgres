@@ -159,6 +159,7 @@ CatalogIndexInsert(CatalogIndexState indstate, HeapTuple heapTuple)
 					 values,	/* array of index Datums */
 					 isnull,	/* is-null flags */
 					 &(heapTuple->t_self),	/* tid of heap tuple */
+					 NULL,
 					 heapRelation,
 					 index->rd_index->indisunique ?
 					 UNIQUE_CHECK_YES : UNIQUE_CHECK_NO,

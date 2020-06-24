@@ -19,6 +19,9 @@
 #include "access/tupdesc.h"
 #include "access/htup_details.h"
 #include "storage/buf.h"
+#ifdef SCSLAB_CVC
+#include "access/itup.h"
+#endif
 
 /*----------
  * The executor stores tuples in a "tuple table" which is a List of
@@ -129,6 +132,12 @@ typedef struct TupleTableSlot
 	MemoryContext tts_mcxt;		/* slot itself is in this context */
 	ItemPointerData tts_tid;	/* stored tuple's tid */
 	Oid			tts_tableOid;	/* table oid of tuple */
+#ifdef SCSLAB_CVC
+	/*
+	 * Unique id for each index entry.
+	 */
+	IndexTupleIdData	ituple_id;
+#endif
 } TupleTableSlot;
 
 /* routines for a TupleTableSlot implementation */

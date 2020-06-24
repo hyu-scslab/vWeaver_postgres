@@ -89,8 +89,8 @@ extern IndexBuildResult *brinbuild(Relation heap, Relation index,
 extern void brinbuildempty(Relation index);
 #ifdef SCSLAB_CVC
 extern bool brininsert(Relation idxRel, Datum *values, bool *nulls,
-					   ItemPointer heaptid, Relation heapRel,
-					   IndexUniqueCheck checkUnique,
+					   ItemPointer heaptid, IndexTupleId itup_id,
+					   Relation heapRel, IndexUniqueCheck checkUnique,
 					   struct IndexInfo *indexInfo, bool inplaceUpdate);
 #else
 extern bool brininsert(Relation idxRel, Datum *values, bool *nulls,

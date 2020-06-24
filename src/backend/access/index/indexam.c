@@ -172,6 +172,7 @@ index_insert(Relation indexRelation,
 			 Datum *values,
 			 bool *isnull,
 			 ItemPointer heap_t_ctid,
+			 IndexTupleId index_tuple_id,
 			 Relation heapRelation,
 			 IndexUniqueCheck checkUnique,
 			 IndexInfo *indexInfo,
@@ -197,7 +198,8 @@ index_insert(Relation indexRelation,
 
 #ifdef SCSLAB_CVC
 	return indexRelation->rd_indam->aminsert(indexRelation, values, isnull,
-											 heap_t_ctid, heapRelation,
+											 heap_t_ctid, index_tuple_id,
+											 heapRelation,
 											 checkUnique, indexInfo,
 											 inplaceUpdate);
 #else
@@ -560,7 +562,18 @@ index_getnext_tid(IndexScanDesc scan, ScanDirection direction)
 	pgstat_count_index_tuples(scan->indexRelation, 1);
 
 	/* Return the TID of the tuple we found. */
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(scan->heapRelation))
+	{
+		return &scan->xs_tid;
+	}
+	else
+	{
+		return &scan->xs_heaptid;
+	}
+#else
 	return &scan->xs_heaptid;
+#endif
 }
 
 /* ----------------
@@ -587,9 +600,24 @@ index_fetch_heap(IndexScanDesc scan, TupleTableSlot *slot)
 	bool		all_dead = false;
 	bool		found;
 
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(scan->heapRelation))
+	{
+		found = table_index_fetch_tuple(scan->xs_heapfetch, &scan->xs_tid,
+										scan->xs_snapshot, slot,
+										&scan->xs_heap_continue, &all_dead);
+	}
+	else
+	{
+		found = table_index_fetch_tuple(scan->xs_heapfetch, &scan->xs_heaptid,
+										scan->xs_snapshot, slot,
+										&scan->xs_heap_continue, &all_dead);
+	}
+#else
 	found = table_index_fetch_tuple(scan->xs_heapfetch, &scan->xs_heaptid,
 									scan->xs_snapshot, slot,
 									&scan->xs_heap_continue, &all_dead);
+#endif
 
 	if (found)
 		pgstat_count_heap_fetch(scan->indexRelation);
@@ -638,17 +666,54 @@ index_getnext_slot(IndexScanDesc scan, ScanDirection direction, TupleTableSlot *
 			if (tid == NULL)
 				break;
 
+#ifdef SCSLAB_CVC
+#else
 			Assert(ItemPointerEquals(tid, &scan->xs_heaptid));
+#endif
 		}
 
+#ifdef SCSLAB_CVC
+		//slot->ituple_id.tid = scan->xs_tid;
+		slot->ituple_id.tid = scan->xs_heaptid;
+		slot->ituple_id.xid = scan->xs_xid;
+#ifdef SCSLAB_CVC_DEBUG
+//		if (VersionChainIsNewToOld(scan->heapRelation)) {
+//			elog(WARNING, "[SCLSAB] index getnext slot %s, index tuple id : (%d, %d), "
+//					"heap tid : (%d, %d)",
+//					RelationGetRelationName(scan->indexRelation),
+//					ItemPointerGetBlockNumber(&scan->xs_heaptid),
+//					ItemPointerGetOffsetNumber(&scan->xs_heaptid),
+//					ItemPointerGetBlockNumber(&scan->xs_tid),
+//					ItemPointerGetOffsetNumber(&scan->xs_tid));
+//		}
+#endif
+#endif
 		/*
 		 * Fetch the next (or only) visible heap tuple for this index entry.
 		 * If we don't find anything, loop around and grab the next TID from
 		 * the index.
 		 */
 		Assert(ItemPointerIsValid(&scan->xs_heaptid));
+#ifdef SCSLAB_CVC
+		if (index_fetch_heap(scan, slot))
+		{
+#ifdef SCSLAB_CVC_DEBUG
+//			if (VersionChainIsNewToOld(scan->heapRelation)) {
+//				elog(WARNING, "[SCLSAB] after index fetch heap %s, index tuple id : (%d, %d), "
+//						"heap tid : (%d, %d)",
+//						RelationGetRelationName(scan->indexRelation),
+//						ItemPointerGetBlockNumber(&scan->xs_heaptid),
+//						ItemPointerGetOffsetNumber(&scan->xs_heaptid),
+//						ItemPointerGetBlockNumber(&scan->xs_tid),
+//						ItemPointerGetOffsetNumber(&scan->xs_tid));
+//			}
+#endif
+			return true;
+		}
+#else
 		if (index_fetch_heap(scan, slot))
 			return true;
+#endif
 	}
 
 	return false;

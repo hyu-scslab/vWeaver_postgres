@@ -287,6 +287,9 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 #endif
 {
 	ItemPointer tupleid = &slot->tts_tid;
+#ifdef SCSLAB_CVC
+	IndexTupleId	itupleid = &slot->ituple_id;
+#endif
 	List	   *result = NIL;
 	ResultRelInfo *resultRelInfo;
 	int			i;
@@ -406,6 +409,7 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 						 values,	/* array of index Datums */
 						 isnull,	/* null flags */
 						 tupleid,	/* tid of heap tuple */
+						 itupleid,
 						 heapRelation,	/* heap relation */
 						 checkUnique,	/* type of uniqueness check to do */
 						 indexInfo,     /* index AM may need this */

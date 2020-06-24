@@ -2385,8 +2385,16 @@ heap_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples,
 	}
 
 	/* copy t_self fields back to the caller's slots */
+#ifdef SCSLAB_CVC
+	for (i = 0; i < ntuples; i++)
+	{
+		IndexTupleIdSet(&slots[i]->ituple_id, &heaptuples[i]->t_self, GetCurrentTransactionId());
+		slots[i]->tts_tid = heaptuples[i]->t_self;
+	}
+#else
 	for (i = 0; i < ntuples; i++)
 		slots[i]->tts_tid = heaptuples[i]->t_self;
+#endif
 
 	pgstat_count_heap_insert(relation, ntuples);
 }
@@ -2734,7 +2742,15 @@ l1:
 	tp.t_data->t_infomask2 &= ~HEAP_KEYS_UPDATED;
 	tp.t_data->t_infomask |= new_infomask;
 	tp.t_data->t_infomask2 |= new_infomask2;
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(relation))
+	{
+		HeapTupleHeaderSetHotUpdated(tp.t_data);
+		HeapTupleHeaderClearHeapOnly(tp.t_data);
+	}
+#else
 	HeapTupleHeaderClearHotUpdated(tp.t_data);
+#endif
 	HeapTupleHeaderSetXmax(tp.t_data, new_xmax);
 	HeapTupleHeaderSetCmax(tp.t_data, cid, iscombo);
 	/* Make sure there is no forward chain link in t_ctid */
@@ -3547,6 +3563,11 @@ l2:
 
 	newtupsize = MAXALIGN(newtup->t_len);
 
+#ifdef SCSLAB_CVC_DEBUG
+	if (VersionChainIsNewToOld(relation) && need_toast) {
+		elog(WARNING, "[SCSLAB] toast %s", RelationGetRelationName(relation));
+	}
+#endif
 	if (need_toast || newtupsize > pagefree)
 	{
 		TransactionId xmax_lock_old_tuple;
@@ -3779,9 +3800,17 @@ l2:
 		 * this tuple after current transaction is committed successfully.
 		 */
 		HeapTupleSetHeapOnly(&oldtup);
+
 		HeapTupleClearHotUpdated(&oldtup);
+
 		HeapTupleClearHeapOnly(heaptup);
 		HeapTupleClearHeapOnly(newtup);
+
+		/*
+		 * HotUpdated flag means it might be pointed by a index entry.
+		 */
+		HeapTupleSetHotUpdated(heaptup);
+		HeapTupleSetHotUpdated(newtup);
 	} else {
 		if (use_hot_update)
 		{
@@ -3844,11 +3873,24 @@ l2:
 	/* record address of new tuple in t_ctid of old one */
 	oldtup.t_data->t_ctid = heaptup->t_self;
 #ifdef SCSLAB_CVC
+#ifdef SCSLAB_CVC_DEBUG
+	if (VersionChainIsNewToOld(relation))
+	{
+		elog(WARNING, "[SCSLAB] heap update %s (%d, %d) -> (%d, %d)",
+				RelationGetRelationName(relation),
+				ItemPointerGetBlockNumber(&oldtup.t_self),
+				ItemPointerGetOffsetNumber(&oldtup.t_self),
+				ItemPointerGetBlockNumber(&heaptup->t_self),
+				ItemPointerGetOffsetNumber(&heaptup->t_self));
+	}
+#endif
+#endif
+#ifdef SCSLAB_CVC
 	oldtup_vRidge_xid = oldtup.t_data->t_vRidge_xid;
 	oldtup_vRidge_ptr = oldtup.t_data->t_vRidge_ptr;
 	oldtup_vRidge_level = oldtup.t_data->t_vRidge_level;
 
-	oldtup_xid = HeapTupleHeaderGetXmin(oldtup.t_data);
+	oldtup_xid = HeapTupleHeaderGetRawXmin(oldtup.t_data);
 	oldtup_ptr = oldtup.t_self;
 	oldtup_level = oldtup.t_data->t_level;
 #endif

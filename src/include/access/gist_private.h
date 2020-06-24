@@ -395,8 +395,8 @@ typedef struct GiSTOptions
 extern void gistbuildempty(Relation index);
 #ifdef SCSLAB_CVC
 extern bool gistinsert(Relation r, Datum *values, bool *isnull,
-					   ItemPointer ht_ctid, Relation heapRel,
-					   IndexUniqueCheck checkUnique,
+					   ItemPointer ht_ctid, IndexTupleId itup_id,
+					   Relation heapRel, IndexUniqueCheck checkUnique,
 					   struct IndexInfo *indexInfo, bool inplaceUpdate);
 #else
 extern bool gistinsert(Relation r, Datum *values, bool *isnull,

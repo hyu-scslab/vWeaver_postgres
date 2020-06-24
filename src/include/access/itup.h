@@ -19,6 +19,30 @@
 #include "storage/bufpage.h"
 #include "storage/itemptr.h"
 
+#ifdef SCSLAB_CVC
+/*
+ * Unique combination to identify each index entry.
+ */
+typedef struct IndexTupleIdData
+{
+	ItemPointerData	tid;
+	TransactionId	xid;
+} IndexTupleIdData;
+
+typedef IndexTupleIdData* IndexTupleId;
+
+#define IndexTupleIdSet(pointer, fromtid, fromxid) \
+( \
+	ItemPointerCopy(fromtid, &(pointer)->tid), \
+	(pointer)->xid = fromxid \
+)
+
+#define IndexTupleSetId(itup, tid, xid) \
+( \
+	IndexTupleIdSet((&(itup)->itup_id), tid, xid) \
+)
+
+#endif
 /*
  * Index tuple header structure
  *
@@ -34,6 +58,18 @@
 
 typedef struct IndexTupleData
 {
+#ifdef SCSLAB_CVC
+	/*
+	 * t_tid is only worked for tiebreaker and the role for reference TID
+	 * to heap tuple is taken by t_heap_tid.
+	 */
+	ItemPointerData	t_heap_tid;
+
+	/*
+	 * also tiebreaker. not sorted????
+	 */
+	TransactionId	t_ancester_xid;
+#endif
 	ItemPointerData t_tid;		/* reference TID to heap tuple */
 
 	/* ---------------

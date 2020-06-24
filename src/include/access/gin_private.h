@@ -110,8 +110,8 @@ extern IndexBuildResult *ginbuild(Relation heap, Relation index,
 extern void ginbuildempty(Relation index);
 #ifdef SCSLAB_CVC
 extern bool gininsert(Relation index, Datum *values, bool *isnull,
-					  ItemPointer ht_ctid, Relation heapRel,
-					  IndexUniqueCheck checkUnique,
+					  ItemPointer ht_ctid, IndexTupleId itup_id,
+					  Relation heapRel, IndexUniqueCheck checkUnique,
 					  struct IndexInfo *indexInfo, bool inplaceUpdate);
 #else
 extern bool gininsert(Relation index, Datum *values, bool *isnull,

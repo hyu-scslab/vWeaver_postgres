@@ -2234,6 +2234,25 @@ ExecModifyTable(PlanState *pstate)
 					estate->es_result_relation_info = resultRelInfo;
 				break;
 			case CMD_UPDATE:
+#ifdef SCSLAB_CVC
+				if (VersionChainIsNewToOld(estate->es_result_relation_info->ri_RelationDesc))
+				{
+					if (subplanstate != NULL && nodeTag(subplanstate) == T_IndexScanState)
+					{
+						slot->ituple_id =
+							castNode(IndexScanState, subplanstate)->ss.ps.ps_ExprContext->ecxt_scantuple->ituple_id;
+#ifdef SCSLAB_CVC_DEBUG
+						elog(WARNING, "[SCSLAB] ExecModifyTable : real heap tid : (%d, %d)"
+								", index tuple id : (%d, %d, %d)",
+								ItemPointerGetBlockNumber(tupleid),
+								ItemPointerGetOffsetNumber(tupleid),
+								ItemPointerGetBlockNumber(&slot->ituple_id.tid),
+								ItemPointerGetOffsetNumber(&slot->ituple_id.tid),
+								slot->ituple_id.xid);
+#endif
+					}
+				}
+#endif
 				slot = ExecUpdate(node, tupleid, oldtuple, slot, planSlot,
 								  &node->mt_epqstate, estate, node->canSetTag);
 				break;

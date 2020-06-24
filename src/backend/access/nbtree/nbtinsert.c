@@ -35,24 +35,12 @@ static TransactionId _bt_check_unique(Relation rel, BTInsertState insertstate,
 									  Relation heapRel,
 									  IndexUniqueCheck checkUnique, bool *is_unique,
 									  uint32 *speculativeToken);
-#ifdef SCSLAB_CVC
-static OffsetNumber _bt_findinsertloc(Relation rel,
-									  BTInsertState insertstate,
-									  bool checkingunique,
-									  BTStack stack,
-									  Relation heapRel,
-									  bool inplaceUpdate);
-#else
 static OffsetNumber _bt_findinsertloc(Relation rel,
 									  BTInsertState insertstate,
 									  bool checkingunique,
 									  BTStack stack,
 									  Relation heapRel);
-#endif
 static void _bt_stepright(Relation rel, BTInsertState insertstate, BTStack stack);
-#ifdef SCSLAB_CVC
-static bool _bt_stepright_opt(Relation rel, BTInsertState insertstate, BTStack stack);
-#endif
 #ifdef SCSLAB_CVC
 static void _bt_insertonpg(Relation rel, BTScanInsert itup_key,
 						   Buffer buf,
@@ -123,6 +111,18 @@ _bt_doinsert(Relation rel, IndexTuple itup,
 
 	/* we need an insertion scan key to do our search, so build one */
 	itup_key = _bt_mkscankey(rel, itup);
+#ifdef SCSLAB_CVC_DEBUG
+	if (VersionChainIsNewToOld(rel))
+	{
+		elog(WARNING, "[SCSLAB] itup key : real heap tid : (%d, %d)"
+				", index tuple id : (%d, %d, %d)",
+				ItemPointerGetBlockNumber(&itup_key->itup_id.tid),
+				ItemPointerGetOffsetNumber(&itup_key->itup_id.tid),
+				ItemPointerGetBlockNumber(itup_key->scantid),
+				ItemPointerGetOffsetNumber(itup_key->scantid),
+				itup_key->itup_id.xid);
+	}
+#endif
 
 	if (checkingunique)
 	{
@@ -331,14 +331,15 @@ top:
 		 * search bounds established within _bt_check_unique when insertion is
 		 * checkingunique.
 		 */
-#ifdef SCSLAB_CVC
-		newitemoff = _bt_findinsertloc(rel, &insertstate, checkingunique,
-									   stack, heapRel, inplaceUpdate);
-#else
 		newitemoff = _bt_findinsertloc(rel, &insertstate, checkingunique,
 									   stack, heapRel);
-#endif
 #ifdef SCSLAB_CVC
+#ifdef SCSLAB_CVC_DEBUG
+		if (VersionChainIsNewToOld(rel)) {
+			elog(WARNING, "[SCSLAB] newoffset %s, %d",
+					RelationGetRelationName(rel), newitemoff);
+		}
+#endif
 		if (VersionChainIsNewToOld(rel) && inplaceUpdate) {
 			/* Only one index entry for one record */
 			_bt_insertonpg(rel, itup_key, insertstate.buf, InvalidBuffer, stack,
@@ -485,15 +486,38 @@ _bt_check_unique(Relation rel, BTInsertState insertstate, Relation heapRel,
 
 				/* okay, we gotta fetch the heap tuple ... */
 				curitup = (IndexTuple) PageGetItem(page, curitemid);
+#ifdef SCSLAB_CVC
+				if (VersionChainIsNewToOld(rel))
+				{
+					htid = curitup->t_heap_tid;
+				}
+				else
+				{
+					htid = curitup->t_tid;
+				}
+#else
 				htid = curitup->t_tid;
+#endif
 
 				/*
 				 * If we are doing a recheck, we expect to find the tuple we
 				 * are rechecking.  It's not a duplicate, but we have to keep
 				 * scanning.
 				 */
+#ifdef SCSLAB_CVC
+				if (VersionChainIsNewToOld(rel) &&
+						checkUnique == UNIQUE_CHECK_EXISTING &&
+						ItemPointerCompare(&htid, &itup->t_heap_tid) == 0)
+				{
+					found = true;
+				}
+				else if (!VersionChainIsNewToOld(rel) &&
+						checkUnique == UNIQUE_CHECK_EXISTING &&
+						ItemPointerCompare(&htid, &itup->t_tid) == 0)
+#else
 				if (checkUnique == UNIQUE_CHECK_EXISTING &&
 					ItemPointerCompare(&htid, &itup->t_tid) == 0)
+#endif
 				{
 					found = true;
 				}
@@ -578,6 +602,10 @@ _bt_check_unique(Relation rel, BTInsertState insertstate, Relation heapRel,
 
 #ifdef SCSLAB_CVC
 					if (VersionChainIsNewToOld(heapRel)) {
+#ifdef SCSLAB_CVC_DEBUG
+						elog(WARNING, "[SCSLAB] unique check.. why... : %s",
+								RelationGetRelationName(heapRel));
+#endif
 						break;
 					}
 #endif
@@ -734,22 +762,12 @@ _bt_check_unique(Relation rel, BTInsertState insertstate, Relation heapRel,
  *		If there is not enough room on the page for the new tuple, we try to
  *		make room by removing any LP_DEAD tuples.
  */
-#ifdef SCSLAB_CVC
-static OffsetNumber
-_bt_findinsertloc(Relation rel,
-				  BTInsertState insertstate,
-				  bool checkingunique,
-				  BTStack stack,
-				  Relation heapRel,
-				  bool inplaceUpdate)
-#else
 static OffsetNumber
 _bt_findinsertloc(Relation rel,
 				  BTInsertState insertstate,
 				  bool checkingunique,
 				  BTStack stack,
 				  Relation heapRel)
-#endif
 {
 	BTScanInsert itup_key = insertstate->itup_key;
 	Page		page = BufferGetPage(insertstate->buf);
@@ -807,17 +825,7 @@ _bt_findinsertloc(Relation rel,
 					_bt_compare(rel, itup_key, page, P_HIKEY) <= 0)
 					break;
 
-#ifdef SCSLAB_CVC
-				if (inplaceUpdate) {
-					if (!_bt_stepright_opt(rel, insertstate, stack)) {
-						break;
-					}
-				} else {
-					_bt_stepright(rel, insertstate, stack);
-				}
-#else
 				_bt_stepright(rel, insertstate, stack);
-#endif
 				/* Update local state after stepping right */
 				page = BufferGetPage(insertstate->buf);
 				lpageop = (BTPageOpaque) PageGetSpecialPointer(page);
@@ -974,63 +982,6 @@ _bt_stepright(Relation rel, BTInsertState insertstate, BTStack stack)
 	insertstate->buf = rbuf;
 	insertstate->bounds_valid = false;
 }
-#ifdef SCSLAB_CVC
-static bool
-_bt_stepright_opt(Relation rel, BTInsertState insertstate, BTStack stack)
-{
-	Page		page;
-	BTPageOpaque lpageop;
-	Buffer		rbuf;
-	BlockNumber rblkno;
-	BTScanInsert	itup_key = insertstate->itup_key;
-
-	page = BufferGetPage(insertstate->buf);
-	lpageop = (BTPageOpaque) PageGetSpecialPointer(page);
-
-	rbuf = InvalidBuffer;
-	rblkno = lpageop->btpo_next;
-	for (;;)
-	{
-		rbuf = _bt_relandgetbuf(rel, rbuf, rblkno, BT_WRITE);
-		page = BufferGetPage(rbuf);
-		lpageop = (BTPageOpaque) PageGetSpecialPointer(page);
-
-		/*
-		 * If this page was incompletely split, finish the split now.  We do
-		 * this while holding a lock on the left sibling, which is not good
-		 * because finishing the split could be a fairly lengthy operation.
-		 * But this should happen very seldom.
-		 */
-		if (P_INCOMPLETE_SPLIT(lpageop))
-		{
-			_bt_finish_split(rel, rbuf, stack);
-			rbuf = InvalidBuffer;
-			continue;
-		}
-
-		if (!P_IGNORE(lpageop))
-			break;
-		if (P_RIGHTMOST(lpageop))
-			elog(ERROR, "fell off the end of index \"%s\"",
-				 RelationGetRelationName(rel));
-
-		rblkno = lpageop->btpo_next;
-	}
-
-	if (_bt_compare(rel, itup_key, page, P_FIRSTDATAKEY(lpageop)) < 0) {
-		/* Don't move to right. */
-		_bt_relbuf(rel, rbuf);
-		return false;
-	}
-
-	/* rbuf locked; unlock buf, update state for caller */
-	_bt_relbuf(rel, insertstate->buf);
-	insertstate->buf = rbuf;
-	insertstate->bounds_valid = false;
-	
-	return true;
-}
-#endif
 
 /*----------
  *	_bt_insertonpg() -- Insert a tuple on a particular page in the index.
@@ -1145,6 +1096,11 @@ _bt_insertonpg(Relation rel,
 				 BlockNumberIsValid(RelationGetTargetBlock(rel))));
 
 		/* split the buffer into left and right halves */
+#ifdef SCSLAB_CVC_DEBUG
+		if (VersionChainIsNewToOld(rel)) {
+			elog(WARNING, "[SCSLAB] split!!!! %s", RelationGetRelationName(rel));
+		}
+#endif
 		rbuf = _bt_split(rel, itup_key, buf, cbuf, newitemoff, itemsz, itup);
 		PredicateLockPageSplit(rel,
 							   BufferGetBlockNumber(buf),
@@ -1222,17 +1178,26 @@ _bt_insertonpg(Relation rel,
 
 #ifdef SCSLAB_CVC
 		if (inplaceUpdate) {
-			Assert(newitemoff != 0);
-			Assert(OffsetNumberIsValid(OffsetNumberPrev(newitemoff)));
-			Assert(newitemoff != P_FIRSTDATAKEY(lpageop));
-			Assert(_bt_check_natts(rel, true, page, OffsetNumberPrev(newitemoff)));
+			//Assert(OffsetNumberIsValid(OffsetNumberPrev(newitemoff)));
+			//Assert(newitemoff != P_FIRSTDATAKEY(lpageop));
+			//Assert(_bt_check_natts(rel, true, page, OffsetNumberPrev(newitemoff)));
+			Assert(VersionChainIsNewToOld(rel));
+			Assert(OffsetNumberIsValid(newitemoff));
+			Assert(_bt_check_natts(rel, true, page, newitemoff));
 			Assert(P_ISLEAF(lpageop));
+#ifdef SCSLAB_CVC_DEBUG
+			elog(WARNING, "[SCSLAB] pgaddtup inplace : %s", RelationGetRelationName(rel));
+			elog(WARNING, "[SCSLAB] index entry : (%d, %d), tid : (%d, %d)",
+					buf, newitemoff,
+					ItemPointerGetBlockNumber(&itup->t_tid),
+					ItemPointerGetOffsetNumber(&itup->t_tid));
+#endif
 
-			if (!_bt_pgaddtup_inplace(page, itemsz, itup, OffsetNumberPrev(newitemoff)))
+			if (!_bt_pgaddtup_inplace(page, itemsz, itup, newitemoff))
 				elog(PANIC, "[SCSLAB] failed to add new item to block %u in index \"%s\"",
 					 itup_blkno, RelationGetRelationName(rel));
 
-			Assert(_bt_check_natts(rel, true, page, OffsetNumberPrev(newitemoff)));
+			Assert(_bt_check_natts(rel, true, page, newitemoff));
 		} else {
 			if (!_bt_pgaddtup(page, itemsz, itup, newitemoff))
 				elog(PANIC, "failed to add new item to block %u in index \"%s\"",

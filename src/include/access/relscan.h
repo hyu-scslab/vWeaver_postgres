@@ -129,6 +129,10 @@ typedef struct IndexScanDescData
 	HeapTuple	xs_hitup;		/* index data returned by AM, as HeapTuple */
 	struct TupleDescData *xs_hitupdesc; /* rowtype descriptor of xs_hitup */
 
+#ifdef SCSLAB_CVC
+	ItemPointerData	xs_tid;
+	TransactionId	xs_xid;
+#endif
 	ItemPointerData xs_heaptid; /* result */
 	bool		xs_heap_continue;	/* T if must keep walking, potential
 									 * further results */

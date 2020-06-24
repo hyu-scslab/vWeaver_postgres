@@ -474,6 +474,9 @@ typedef struct BTScanInsertData
 	bool		nextkey;
 	bool		pivotsearch;
 	ItemPointer scantid;		/* tiebreaker for scankeys */
+#ifdef SCSLAB_CVC
+	IndexTupleIdData	itup_id;
+#endif
 	int			keysz;			/* Size of scankeys array */
 	ScanKeyData scankeys[INDEX_MAX_KEYS];	/* Must appear last */
 } BTScanInsertData;
@@ -543,6 +546,10 @@ typedef struct BTScanPosItem	/* what we remember about each match */
 	ItemPointerData heapTid;	/* TID of referenced heap item */
 	OffsetNumber indexOffset;	/* index item's location within page */
 	LocationIndex tupleOffset;	/* IndexTuple's offset in workspace, if any */
+#ifdef SCSLAB_CVC
+	ItemPointerData	tid;
+	TransactionId	xid;
+#endif
 } BTScanPosItem;
 
 typedef struct BTScanPosData
@@ -697,8 +704,8 @@ typedef BTScanOpaqueData *BTScanOpaque;
 extern void btbuildempty(Relation index);
 #ifdef SCSLAB_CVC
 extern bool btinsert(Relation rel, Datum *values, bool *isnull,
-					 ItemPointer ht_ctid, Relation heapRel,
-					 IndexUniqueCheck checkUnique,
+					 ItemPointer ht_ctid, IndexTupleId itup_id,
+					 Relation heapRel, IndexUniqueCheck checkUnique,
 					 struct IndexInfo *indexInfo, bool inplaceUpdate);
 #else
 extern bool btinsert(Relation rel, Datum *values, bool *isnull,
@@ -787,6 +794,9 @@ extern BTStack _bt_search(Relation rel, BTScanInsert key, Buffer *bufP,
 extern Buffer _bt_moveright(Relation rel, BTScanInsert key, Buffer buf,
 							bool forupdate, BTStack stack, int access, Snapshot snapshot);
 extern OffsetNumber _bt_binsrch_insert(Relation rel, BTInsertState insertstate);
+#ifdef SCSLAB_CVC
+extern OffsetNumber _bt_linear_search_in_page(Relation rel, BTInsertState insertstate);
+#endif
 extern int32 _bt_compare(Relation rel, BTScanInsert key, Page page, OffsetNumber offnum);
 extern bool _bt_first(IndexScanDesc scan, ScanDirection dir);
 extern bool _bt_next(IndexScanDesc scan, ScanDirection dir);

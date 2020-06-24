@@ -192,7 +192,7 @@ btbuildempty(Relation index)
 #ifdef SCSLAB_CVC
 bool
 btinsert(Relation rel, Datum *values, bool *isnull,
-		 ItemPointer ht_ctid, Relation heapRel,
+		 ItemPointer ht_ctid, IndexTupleId itup_id, Relation heapRel,
 		 IndexUniqueCheck checkUnique,
 		 IndexInfo *indexInfo, bool inplaceUpdate)
 #else
@@ -208,7 +208,22 @@ btinsert(Relation rel, Datum *values, bool *isnull,
 
 	/* generate an index tuple */
 	itup = index_form_tuple(RelationGetDescr(rel), values, isnull);
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(rel))
+	{
+		Assert(itup_id != NULL);
+		itup->t_tid = itup_id->tid;
+		itup->t_ancester_xid = itup_id->xid;
+		itup->t_heap_tid = *ht_ctid;
+	}
+	else
+	{
+		itup->t_tid = *ht_ctid;
+		itup->t_ancester_xid = InvalidTransactionId; /* No value */
+	}
+#else
 	itup->t_tid = *ht_ctid;
+#endif
 
 #ifdef SCSLAB_CVC
 	result = _bt_doinsert(rel, itup, checkUnique, heapRel, inplaceUpdate);
@@ -292,6 +307,19 @@ btgettuple(IndexScanDesc scan, ScanDirection dir)
 		/* ... otherwise see if we have more array keys to deal with */
 	} while (so->numArrayKeys && _bt_advance_array_keys(scan, dir));
 
+#ifdef SCSLAB_CVC_DEBUG
+//	if (VersionChainIsNewToOld(scan->heapRelation) && res) {
+//		elog(WARNING, "[SCLSAB] _bt_readpage %s, buf : %d, %d ~ %d, curr : %d"
+//				", tid : (%d, %d)",
+//				RelationGetRelationName(scan->indexRelation),
+//				so->currPos.buf,
+//				so->currPos.firstItem,
+//				so->currPos.lastItem,
+//				so->currPos.itemIndex,
+//				ItemPointerGetBlockNumber(&scan->xs_heaptid),
+//				ItemPointerGetOffsetNumber(&scan->xs_heaptid));
+//	}
+#endif
 	return res;
 }
 
@@ -1254,7 +1282,18 @@ restart:
 
 				itup = (IndexTuple) PageGetItem(page,
 												PageGetItemId(page, offnum));
+#ifdef SCSLAB_CVC
+				if (VersionChainIsNewToOld(rel))
+				{
+					htup = &(itup->t_heap_tid);
+				}
+				else
+				{
+					htup = &(itup->t_tid);
+				}
+#else
 				htup = &(itup->t_tid);
+#endif
 
 				/*
 				 * During Hot Standby we currently assume that

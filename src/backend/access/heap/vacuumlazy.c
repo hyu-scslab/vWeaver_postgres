@@ -538,6 +538,18 @@ lazy_scan_heap(Relation onerel, VacuumParams *params, LVRelStats *vacrelstats,
 				(errmsg("vacuuming \"%s.%s\"",
 						get_namespace_name(RelationGetNamespace(onerel)),
 						relname)));
+#ifdef SCSLAB_CVC_DEBUG
+	if (VersionChainIsNewToOld(onerel)) {
+		elog(WARNING, "[SCSLAB] vacuum init : %s", relname);
+		elog(WARNING, "[SCSLAB] vacuum init : %d", nindexes);
+	}
+#endif
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(onerel)) {
+		/* disable vacuum */
+		return;
+	}
+#endif
 
 	empty_pages = vacuumed_pages = 0;
 	next_fsm_block_to_vacuum = (BlockNumber) 0;

@@ -174,7 +174,7 @@ unique_key_recheck(PG_FUNCTION_ARGS)
 		 * about.
 		 */
 #ifdef SCSLAB_CVC
-		index_insert(indexRel, values, isnull, &checktid,
+		index_insert(indexRel, values, isnull, &checktid, NULL,
 					 trigdata->tg_relation, UNIQUE_CHECK_EXISTING,
 					 indexInfo, false);
 #else

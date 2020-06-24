@@ -143,7 +143,7 @@ brinhandler(PG_FUNCTION_ARGS)
 #ifdef SCSLAB_CVC
 bool
 brininsert(Relation idxRel, Datum *values, bool *nulls,
-		   ItemPointer heaptid, Relation heapRel,
+		   ItemPointer heaptid, IndexTupleId itup_id, Relation heapRel,
 		   IndexUniqueCheck checkUnique,
 		   IndexInfo *indexInfo, bool inplaceUpdate)
 #else

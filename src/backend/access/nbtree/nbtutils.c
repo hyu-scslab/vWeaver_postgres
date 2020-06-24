@@ -113,6 +113,17 @@ _bt_mkscankey(Relation rel, IndexTuple itup)
 	key->keysz = Min(indnkeyatts, tupnatts);
 	key->scantid = key->heapkeyspace && itup ?
 		BTreeTupleGetHeapTID(itup) : NULL;
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(rel) && itup != NULL)
+	{
+		key->itup_id.xid = itup->t_ancester_xid;
+		key->itup_id.tid = itup->t_heap_tid;
+	}
+	else
+	{
+		key->itup_id.xid = InvalidTransactionId;
+	}
+#endif
 	skey = key->scankeys;
 	for (i = 0; i < indnkeyatts; i++)
 	{
@@ -1790,6 +1801,12 @@ _bt_killitems(IndexScanDesc scan)
 			if (ItemPointerEquals(&ituple->t_tid, &kitem->heapTid))
 			{
 				/* found the item */
+#ifdef SCSLAB_CVC_DEBUG
+				if (VersionChainIsNewToOld(scan->heapRelation)) {
+					elog(WARNING, "[SCSLAB] ItemIdMarkDead %s",
+							RelationGetRelationName(scan->indexRelation));
+				}
+#endif
 				ItemIdMarkDead(iid);
 				killedsomething = true;
 				break;			/* out of inner search loop */

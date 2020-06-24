@@ -351,6 +351,7 @@ PageAddItemInplace(Page page,
 	PageHeader	phdr = (PageHeader) page;
 	ItemId		itemId;
 	OffsetNumber limit;
+	char*		olditem;
 
 	/*
 	 * Be wary about corrupted page pointers
@@ -380,9 +381,26 @@ PageAddItemInplace(Page page,
 	Assert(ItemIdIsUsed(itemId));
 	Assert(ItemIdHasStorage(itemId));
 
+	olditem = (char*) page + ItemIdGetOffset(itemId);
 
 	/* Assume fitted size. */
 	Assert(size == ItemIdGetLength(itemId));
+
+#ifdef SCSLAB_CVC_DEBUG
+	elog(WARNING, "[SCSLAB] index entry off : %d, tid : (%d, %d) -> (%d, %d), "
+			"real heap tid : (%d, %d) -> (%d, %d)",
+			offsetNumber,
+			ItemPointerGetBlockNumber(&((IndexTuple) olditem)->t_tid),
+			ItemPointerGetOffsetNumber(&((IndexTuple) olditem)->t_tid),
+			ItemPointerGetBlockNumber(&((IndexTuple) item)->t_tid),
+			ItemPointerGetOffsetNumber(&((IndexTuple) item)->t_tid),
+			ItemPointerGetBlockNumber(&((IndexTuple) olditem)->t_heap_tid),
+			ItemPointerGetOffsetNumber(&((IndexTuple) olditem)->t_heap_tid),
+			ItemPointerGetBlockNumber(&((IndexTuple) item)->t_heap_tid),
+			ItemPointerGetOffsetNumber(&((IndexTuple) item)->t_heap_tid));
+#endif
+	Assert(ItemPointerEquals(&((IndexTuple) olditem)->t_tid,
+				&((IndexTuple) item)->t_tid));
 
 	/* Copy the item's data onto the page */
 	memcpy((char *) page + ItemIdGetOffset(itemId), item, size);

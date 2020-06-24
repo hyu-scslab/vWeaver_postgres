@@ -422,6 +422,142 @@ _bt_binsrch(Relation rel,
 	return OffsetNumberPrev(low);
 }
 
+#ifdef SCSLAB_CVC
+OffsetNumber
+_bt_linear_search_in_page(Relation rel, BTInsertState insertstate)
+{
+//	BTScanInsert	key = insertstate->itup_key;
+//	Page			page;
+//	BTPageOpaque	opaque;
+//	OffsetNumber	low;
+//	OffsetNumber	high;
+//	OffsetNumber	offset;
+//	int32			result;
+//
+//#ifdef SCSLAB_CVC_DEBUG
+//	elog(WARNING, "[SCSLAB] bt_linear_search_in_page %s %d",
+//			RelationGetRelationName(rel), insertstate->buf);
+//#endif
+//	page = BufferGetPage(insertstate->buf);
+//	opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+//
+//	Assert(VersionChainIsNewToOld(rel));
+//	Assert(P_ISLEAF(opaque));
+//	Assert(!key->nextkey);
+//
+//	if (!insertstate->bounds_valid)
+//	{
+//		/* Start new binary search */
+//		low = P_FIRSTDATAKEY(opaque);
+//		high = PageGetMaxOffsetNumber(page);
+//	}
+//	else
+//	{
+//		/* Restore result of previous binary search against same page */
+//		low = insertstate->low;
+//		high = insertstate->stricthigh;
+//	}
+//
+//#ifdef SCSLAB_CVC_DEBUG
+//	elog(WARNING, "[SCSLAB] _bt_linear_search_in_page %s, low %d, high %d)",
+//			RelationGetRelationName(rel), low, high);
+//#endif
+//	/* We would not use cached low & high. */
+//	insertstate->low = InvalidOffsetNumber;
+//	insertstate->stricthigh = InvalidOffsetNumber;
+//	insertstate->bounds_valid = false;
+//
+//	/* If there are no keys on the page, return the first available slot */
+//	if (unlikely(high < low))
+//	{
+//#ifdef SCSLAB_CVC_DEBUG
+//		elog(WARNING, "[SCSLAB] no keys on the page %s",
+//				RelationGetRelationName(rel));
+//#endif
+//		return low;
+//	}
+//
+//	if (key->old_tid)
+//	{
+//		/* Update case. Find the key which is same with old_tid. */
+//
+//		key->scantid = key->old_tid;
+//
+//		for (offset = low; offset <= high; offset = OffsetNumberNext(offset))
+//		{
+//#ifdef SCSLAB_CVC_DEBUG
+//			elog(WARNING, "[SCSLAB] update case %s, %d %lu",
+//					RelationGetRelationName(rel), offset,
+//					PageGetMaxOffsetNumber(page));
+//#endif
+//			result = _bt_compare(rel, key, page, offset);
+//
+//			if (result == 0)
+//			{
+//#ifdef SCSLAB_CVC_DEBUG
+//				elog(WARNING, "[SCSLAB] update case return %s, %d",
+//						RelationGetRelationName(rel), offset);
+//#endif
+//				key->scantid = key->scantid_copy;
+//				return offset;
+//			}
+//		}
+//
+//		key->scantid = key->scantid_copy;
+//
+//		return InvalidOffsetNumber;
+//	}
+//	else
+//	{
+//		/* Insert case. Find first offset on same key's array. */
+//
+//		ItemPointerData	dummy_tid;
+//
+//		ItemPointerSet(&dummy_tid, 0, FirstOffsetNumber);
+//		key->scantid = &dummy_tid;
+//#ifdef SCSLAB_CVC_DEBUG
+//		elog(WARNING, "[SCSLAB] insertion case %s",
+//				RelationGetRelationName(rel));
+//#endif
+//
+//		if (low == high)
+//		{
+//			key->scantid = key->scantid_copy;
+//			return low;
+//		}
+//
+//		for (offset = low; offset <= high; offset = OffsetNumberNext(offset))
+//		{
+//#ifdef SCSLAB_CVC_DEBUG
+//			elog(WARNING, "[SCSLAB] insertion case %s, %d %lu",
+//					RelationGetRelationName(rel), offset,
+//					PageGetMaxOffsetNumber(page));
+//#endif
+//			result = _bt_compare(rel, key, page, offset);
+//
+//			if (result <= 0)
+//			{
+//#ifdef SCSLAB_CVC_DEBUG
+//				elog(WARNING, "[SCSLAB] insertion case return %s, %d",
+//						RelationGetRelationName(rel), offset);
+//#endif
+//				key->scantid = key->scantid_copy;
+//				return offset;
+//			}
+//		}
+//
+//		key->scantid = key->scantid_copy;
+//
+//#ifdef SCSLAB_CVC_DEBUG
+//		elog(WARNING, "[SCSLAB] insertion case fail %s",
+//				RelationGetRelationName(rel));
+//#endif
+//
+//		return OffsetNumberNext(high);
+//	}
+	return 0;
+}
+#endif
 /*
  *
  *	_bt_binsrch_insert() -- Cacheable, incremental leaf page binary search.
@@ -717,14 +853,42 @@ _bt_compare(Relation rel,
 	Assert(key->keysz == IndexRelationGetNumberOfKeyAttributes(rel));
 	if (heapTid == NULL)
 		return 1;
-#ifdef SCSLAB_CVC
-	if (VersionChainIsNewToOld(rel)) {
-		return 1;
-	}
-#endif
 
 	Assert(ntupatts >= IndexRelationGetNumberOfKeyAttributes(rel));
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(rel))
+	{
+		int32 ret = ItemPointerCompare(key->scantid, heapTid);
+		if (ret != 0)
+			return ret;
+
+		if (!P_ISLEAF(opaque))
+			return ret;
+
+		if (key->itup_id.xid == InvalidTransactionId)
+		{
+			/* Scan?? or Insert?? */
+			return 0;
+		}
+
+		Assert(itup->t_ancester_xid != InvalidTransactionId);
+
+		if (key->itup_id.xid < itup->t_ancester_xid)
+			return -1;
+		else if (key->itup_id.xid == itup->t_ancester_xid)
+			return 0;
+		else if (key->itup_id.xid > itup->t_ancester_xid)
+			return 1;
+		else
+			return 0;
+	}
+	else
+	{
+		return ItemPointerCompare(key->scantid, heapTid);
+	}
+#else
 	return ItemPointerCompare(key->scantid, heapTid);
+#endif
 }
 
 /*
@@ -1329,6 +1493,12 @@ readcomplete:
 	/* OK, itemIndex says what to return */
 	currItem = &so->currPos.items[so->currPos.itemIndex];
 	scan->xs_heaptid = currItem->heapTid;
+#ifdef SCSLAB_CVC
+	scan->xs_tid = currItem->tid;
+	scan->xs_xid = currItem->xid;
+	Assert(!VersionChainIsNewToOld(rel) || ItemPointerIsValid(&scan->xs_heaptid));
+	Assert(!VersionChainIsNewToOld(rel) || ItemPointerIsValid(&scan->xs_tid));
+#endif
 	if (scan->xs_want_itup)
 		scan->xs_itup = (IndexTuple) (so->currTuples + currItem->tupleOffset);
 
@@ -1379,6 +1549,14 @@ _bt_next(IndexScanDesc scan, ScanDirection dir)
 	/* OK, itemIndex says what to return */
 	currItem = &so->currPos.items[so->currPos.itemIndex];
 	scan->xs_heaptid = currItem->heapTid;
+#ifdef SCSLAB_CVC
+	scan->xs_tid = currItem->tid;
+	scan->xs_xid = currItem->xid;
+	Assert(!VersionChainIsNewToOld(scan->indexRelation)
+			|| ItemPointerIsValid(&scan->xs_heaptid));
+	Assert(!VersionChainIsNewToOld(scan->indexRelation)
+			|| ItemPointerIsValid(&scan->xs_tid));
+#endif
 	if (scan->xs_want_itup)
 		scan->xs_itup = (IndexTuple) (so->currTuples + currItem->tupleOffset);
 
@@ -1610,6 +1788,10 @@ _bt_saveitem(BTScanOpaque so, int itemIndex,
 
 	currItem->heapTid = itup->t_tid;
 	currItem->indexOffset = offnum;
+#ifdef SCSLAB_CVC
+	currItem->tid = itup->t_heap_tid;
+	currItem->xid = itup->t_ancester_xid;
+#endif
 	if (so->currTuples)
 	{
 		Size		itupsz = IndexTupleSize(itup);
@@ -2227,6 +2409,12 @@ _bt_endpoint(IndexScanDesc scan, ScanDirection dir)
 	/* OK, itemIndex says what to return */
 	currItem = &so->currPos.items[so->currPos.itemIndex];
 	scan->xs_heaptid = currItem->heapTid;
+#ifdef SCSLAB_CVC
+	scan->xs_tid = currItem->tid;
+	scan->xs_xid = currItem->xid;
+	Assert(!VersionChainIsNewToOld(rel) || ItemPointerIsValid(&scan->xs_heaptid));
+	Assert(!VersionChainIsNewToOld(rel) || ItemPointerIsValid(&scan->xs_tid));
+#endif
 	if (scan->xs_want_itup)
 		scan->xs_itup = (IndexTuple) (so->currTuples + currItem->tupleOffset);
 

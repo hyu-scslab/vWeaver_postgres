@@ -646,6 +646,8 @@ heap_prune_one(Relation relation, Buffer buffer, OffsetNumber offnum,
 	HeapTupleHeader htup;
 	HeapTupleData tup;
 
+	Assert(VersionChainIsNewToOld(relation));
+
 	tup.t_tableOid = RelationGetRelid(relation);
 
 	lp = PageGetItemId(dp, offnum);
@@ -701,8 +703,13 @@ heap_prune_one(Relation relation, Buffer buffer, OffsetNumber offnum,
 
 	/* This version might be pointed by index. */
 	if (HeapTupleSatisfiesVacuum(&tup, OldestXmin, buffer)
-		== HEAPTUPLE_DEAD) {
-		heap_prune_record_dead(prstate, offnum);
+		== HEAPTUPLE_DEAD && HeapTupleHeaderIsHotUpdated(htup)) {
+#ifdef SCSLAB_CVC_DEBUG
+		elog(WARNING, "[SCSLAB] heap prune record %s (%d, %d)",
+				RelationGetRelationName(relation), buffer, offnum);
+#endif
+		// TODO: Uncommitted version is not considered..
+		//heap_prune_record_dead(prstate, offnum);
 	}
 
 

@@ -158,9 +158,16 @@ IndexOnlyNext(IndexOnlyScanState *node)
 		 * It's worth going through this complexity to avoid needing to lock
 		 * the VM buffer, which could cause significant contention.
 		 */
+#ifdef SCSLAB_CVC
+		if (VersionChainIsNewToOld(scandesc->heapRelation)
+				|| !VM_ALL_VISIBLE(scandesc->heapRelation,
+					ItemPointerGetBlockNumber(tid),
+					&node->ioss_VMBuffer))
+#else
 		if (!VM_ALL_VISIBLE(scandesc->heapRelation,
 							ItemPointerGetBlockNumber(tid),
 							&node->ioss_VMBuffer))
+#endif
 		{
 			/*
 			 * Rats, we have to visit the heap to check visibility.

@@ -206,7 +206,7 @@ spgbuildempty(Relation index)
 #ifdef SCSLAB_CVC
 bool
 spginsert(Relation index, Datum *values, bool *isnull,
-		  ItemPointer ht_ctid, Relation heapRel,
+		  ItemPointer ht_ctid, IndexTupleId itup_id, Relation heapRel,
 		  IndexUniqueCheck checkUnique,
 		  IndexInfo *indexInfo, bool inplaceUpdate)
 #else

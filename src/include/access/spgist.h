@@ -202,8 +202,8 @@ extern IndexBuildResult *spgbuild(Relation heap, Relation index,
 extern void spgbuildempty(Relation index);
 #ifdef SCSLAB_CVC
 extern bool spginsert(Relation index, Datum *values, bool *isnull,
-					  ItemPointer ht_ctid, Relation heapRel,
-					  IndexUniqueCheck checkUnique,
+					  ItemPointer ht_ctid, IndexTupleId itup_id,
+					  Relation heapRel, IndexUniqueCheck checkUnique,
 					  struct IndexInfo *indexInfo, bool inplaceUpdate);
 #else
 extern bool spginsert(Relation index, Datum *values, bool *isnull,

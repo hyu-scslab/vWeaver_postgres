@@ -150,7 +150,7 @@ gistbuildempty(Relation index)
 #ifdef SCSLAB_CVC
 bool
 gistinsert(Relation r, Datum *values, bool *isnull,
-		   ItemPointer ht_ctid, Relation heapRel,
+		   ItemPointer ht_ctid, IndexTupleId itup_id, Relation heapRel,
 		   IndexUniqueCheck checkUnique,
 		   IndexInfo *indexInfo, bool inplaceUpdate)
 #else

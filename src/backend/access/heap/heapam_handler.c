@@ -211,7 +211,7 @@ fetch_visible_tuple_with_vRidge(
 		}
 		if (TransactionIdIsValid(expected_xmin) &&
 				!TransactionIdEquals(expected_xmin,
-				HeapTupleHeaderGetXmin(heapTuple->t_data)))
+				HeapTupleHeaderGetRawXmin(heapTuple->t_data)))
 		{
 			UnlockReleaseBuffer(buffer);
 			break;
@@ -229,6 +229,23 @@ fetch_visible_tuple_with_vRidge(
 			*tid = ctid;
 			ExecStoreBufferHeapTuple(heapTuple, slot, buffer);
 
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		if (HeapTupleHeaderXminCommitted(heapTuple->t_data) &&
+				!XidInMVCCSnapshot(HeapTupleHeaderGetRawXmin(
+						heapTuple->t_data), snapshot))
+		{
+			/*
+			 * Transaction who created this version is not in snapshot
+			 * but this version is invisible. It means this record is deleted.
+			 * We would never find any visible version even if more travese chain.
+			 */
+#ifdef SCSLAB_CVC_DEBUG
+			elog(WARNING, "[SCSLAB] deleted version %s",
+					RelationGetRelationName(relation));
+#endif
 			UnlockReleaseBuffer(buffer);
 			break;
 		}
@@ -447,6 +464,9 @@ heapam_index_fetch_tuple(struct IndexFetchTableData *scan,
 #ifdef SCSLAB_CVC_VALIDATION
 		ItemPointerData	validation_tid;
 		bool			validation_got_heap_tuple;
+#ifdef SCSLAB_CVC_DEBUG
+		ItemPointerData	temp_tid = *tid;
+#endif /* SCSLAB_CVC_DEBUG */
 
 		validation_tid = *tid;
 
@@ -459,11 +479,27 @@ heapam_index_fetch_tuple(struct IndexFetchTableData *scan,
 				slot, call_again, all_dead);
 
 #ifdef SCSLAB_CVC_VALIDATION
+#ifdef SCSLAB_CVC_DEBUG
+		if (got_heap_tuple == false) {
+			elog(WARNING, "[SCSLAB] fail to fetch tuple");
+			elog(WARNING, "[SCSLAB] fetch tuple %s (%d, %d)",
+					RelationGetRelationName(relation),
+					ItemPointerGetBlockNumber(&temp_tid),
+					ItemPointerGetOffsetNumber(&temp_tid));
+		}
+#endif /* SCSLAB_CVC_DEBUG */
 		Assert(validation_got_heap_tuple == got_heap_tuple);
 		if (got_heap_tuple == true) {
 			Assert(ItemPointerEquals(&validation_tid, tid));
 		}
 #endif /* SCSLAB_CVC_VALIDATION */
+
+//		if (snapshot->snapshot_type != SNAPSHOT_DIRTY
+//				&& !got_heap_tuple)
+//		{
+//			elog(WARNING, "[SCSLAB] fail to find visible version %s",
+//					RelationGetRelationName(relation));
+//		}
 
 		return got_heap_tuple;
 	}
@@ -598,6 +634,9 @@ heapam_tuple_insert(Relation relation, TupleTableSlot *slot, CommandId cid,
 	/* Perform the insertion, and copy the resulting ItemPointer */
 	heap_insert(relation, tuple, cid, options, bistate);
 	ItemPointerCopy(&tuple->t_self, &slot->tts_tid);
+#ifdef SCSLAB_CVC
+	IndexTupleIdSet(&slot->ituple_id, &tuple->t_self, GetCurrentTransactionId());
+#endif
 
 	if (shouldFree)
 		pfree(tuple);
@@ -685,6 +724,10 @@ heapam_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *slot,
 	 */
 #ifdef SCSLAB_CVC
 	if (VersionChainIsNewToOld(relation)) {
+		/*
+		 * Always update index because we make a index entry
+		 * always point newest one.
+		 */
 		*update_indexes = result == TM_Ok;
 	} else {
 		*update_indexes = result == TM_Ok && !HeapTupleIsHeapOnly(tuple);
@@ -2277,6 +2320,7 @@ heapam_index_validate_scan(Relation heapRelation,
 						 values,
 						 isnull,
 						 &rootTuple,
+						 NULL,
 						 heapRelation,
 						 indexInfo->ii_Unique ?
 						 UNIQUE_CHECK_YES : UNIQUE_CHECK_NO,
