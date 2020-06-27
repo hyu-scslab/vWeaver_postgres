@@ -207,7 +207,8 @@ struct HeapTupleHeaderData
 	TransactionId	t_vRidge_xid;
 	Level			t_vRidge_level;
 
-	/* Fields for shortcut */
+	/* Fields for kRidge */
+	ItemPointerData	t_kRidge_ptr;
 #endif
 
 	/* Fields below here must match MinimalTupleData! */

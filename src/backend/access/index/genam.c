@@ -124,6 +124,18 @@ RelationGetIndexScan(Relation indexRelation, int nkeys, int norderbys)
 	scan->xs_itupdesc = NULL;
 	scan->xs_hitup = NULL;
 	scan->xs_hitupdesc = NULL;
+#ifdef SCSLAB_CVC
+	if (get_next_key)
+	{
+		scan->get_next_key = true;
+		scan->first_scan = true;
+		scan->end_scan = false;
+	}
+	else
+	{
+		scan->get_next_key = false;
+	}
+#endif
 
 	return scan;
 }

@@ -1611,6 +1611,9 @@ ExecutePlan(EState *estate,
 	TupleTableSlot *slot;
 	uint64		current_tuple_count;
 
+#ifdef SCSLAB_CVC
+	curr_cmdtype = operation;
+#endif
 	/*
 	 * initialize local variables
 	 */

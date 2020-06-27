@@ -130,8 +130,17 @@ typedef struct IndexScanDescData
 	struct TupleDescData *xs_hitupdesc; /* rowtype descriptor of xs_hitup */
 
 #ifdef SCSLAB_CVC
+	/* index entry's unique id of result */
 	ItemPointerData	xs_tid;
 	TransactionId	xs_xid;
+
+	/*
+	 * in order to return both current key and next key
+	 * for building k_ridgy at update
+	 */
+	bool		get_next_key;
+	bool		first_scan;
+	bool		end_scan;
 #endif
 	ItemPointerData xs_heaptid; /* result */
 	bool		xs_heap_continue;	/* T if must keep walking, potential

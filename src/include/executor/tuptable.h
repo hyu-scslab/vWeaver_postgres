@@ -137,6 +137,11 @@ typedef struct TupleTableSlot
 	 * Unique id for each index entry.
 	 */
 	IndexTupleIdData	ituple_id;
+
+	/*
+	 * Tid of next key k_ridge.
+	 */
+	ItemPointerData		next_key_tid;
 #endif
 } TupleTableSlot;
 

@@ -547,8 +547,18 @@ typedef struct BTScanPosItem	/* what we remember about each match */
 	OffsetNumber indexOffset;	/* index item's location within page */
 	LocationIndex tupleOffset;	/* IndexTuple's offset in workspace, if any */
 #ifdef SCSLAB_CVC
+	/* index entry's unique id */
 	ItemPointerData	tid;
 	TransactionId	xid;
+
+	/*
+	 * Originally, this structure was used to store index entries which
+	 * satisfied scan key. However, we now store unsatisfied index entries
+	 * such as next key too because the work to build k_ridgy require next key
+	 * and we store it in this structure. is_matched is used to classify
+	 * whether this index entry is a matched-key or a next key.
+	 */
+	bool			is_matched;
 #endif
 } BTScanPosItem;
 

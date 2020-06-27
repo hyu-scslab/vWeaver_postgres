@@ -26,6 +26,9 @@
 #include "storage/relfilenode.h"
 #include "utils/relcache.h"
 #include "utils/reltrigger.h"
+#ifdef SCSLAB_CVC
+#include "access/itup.h"
+#endif
 
 
 /*
@@ -611,4 +614,21 @@ extern List *RelationGetRepsetList(Relation rel);
 extern bool VersionChainIsNewToOld(Relation rel);
 #endif
 
+#ifdef SCSLAB_CVC
+/*
+ * Ok.. I decide to use global variables because it is too hard to use slots
+ * to tranfer data between query plan nodes..
+ */
+
+/* We have to get next key to build k_ridgy at update query. */
+extern bool get_next_key;
+extern bool pass_index_scan;
+
+extern bool rightmost_key;
+
+extern ItemPointerData	current_key_heaptid;
+extern IndexTupleIdData	current_key_index_id;
+extern ItemPointerData	next_key_heaptid;
+extern IndexTupleIdData	next_key_index_id;
+#endif /* SCSLAB_CVC */
 #endif							/* REL_H */

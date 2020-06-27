@@ -30,6 +30,10 @@ static bool _bt_readpage(IndexScanDesc scan, ScanDirection dir,
 						 OffsetNumber offnum);
 static void _bt_saveitem(BTScanOpaque so, int itemIndex,
 						 OffsetNumber offnum, IndexTuple itup);
+#ifdef SCSLAB_CVC
+static void _bt_saveitem_nextkey(BTScanOpaque so, int itemIndex,
+						 OffsetNumber offnum, IndexTuple itup);
+#endif
 static bool _bt_steppage(IndexScanDesc scan, ScanDirection dir);
 static bool _bt_readnextpage(IndexScanDesc scan, BlockNumber blkno, ScanDirection dir);
 static bool _bt_parallel_readpage(IndexScanDesc scan, BlockNumber blkno,
@@ -1494,10 +1498,17 @@ readcomplete:
 	currItem = &so->currPos.items[so->currPos.itemIndex];
 	scan->xs_heaptid = currItem->heapTid;
 #ifdef SCSLAB_CVC
-	scan->xs_tid = currItem->tid;
-	scan->xs_xid = currItem->xid;
-	Assert(!VersionChainIsNewToOld(rel) || ItemPointerIsValid(&scan->xs_heaptid));
-	Assert(!VersionChainIsNewToOld(rel) || ItemPointerIsValid(&scan->xs_tid));
+	if (VersionChainIsNewToOld(rel))
+	{
+		/* Now, xs_tid is real heap tid and xs_heaptid is unique id. */
+		scan->xs_tid = currItem->tid;
+		scan->xs_xid = currItem->xid;
+		Assert(ItemPointerIsValid(&scan->xs_heaptid));
+		Assert(ItemPointerIsValid(&scan->xs_tid));
+
+		if (scan->get_next_key)
+			scan->end_scan = !currItem->is_matched;
+	}
 #endif
 	if (scan->xs_want_itup)
 		scan->xs_itup = (IndexTuple) (so->currTuples + currItem->tupleOffset);
@@ -1550,12 +1561,17 @@ _bt_next(IndexScanDesc scan, ScanDirection dir)
 	currItem = &so->currPos.items[so->currPos.itemIndex];
 	scan->xs_heaptid = currItem->heapTid;
 #ifdef SCSLAB_CVC
-	scan->xs_tid = currItem->tid;
-	scan->xs_xid = currItem->xid;
-	Assert(!VersionChainIsNewToOld(scan->indexRelation)
-			|| ItemPointerIsValid(&scan->xs_heaptid));
-	Assert(!VersionChainIsNewToOld(scan->indexRelation)
-			|| ItemPointerIsValid(&scan->xs_tid));
+	if (VersionChainIsNewToOld(scan->indexRelation))
+	{
+		/* Now, xs_tid is real heap tid and xs_heaptid is unique id. */
+		scan->xs_tid = currItem->tid;
+		scan->xs_xid = currItem->xid;
+		Assert(ItemPointerIsValid(&scan->xs_heaptid));
+		Assert(ItemPointerIsValid(&scan->xs_tid));
+
+		if (scan->get_next_key)
+			scan->end_scan = !currItem->is_matched;
+	}
 #endif
 	if (scan->xs_want_itup)
 		scan->xs_itup = (IndexTuple) (so->currTuples + currItem->tupleOffset);
@@ -1676,6 +1692,16 @@ _bt_readpage(IndexScanDesc scan, ScanDirection dir, OffsetNumber offnum)
 				_bt_saveitem(so, itemIndex, offnum, itup);
 				itemIndex++;
 			}
+#ifdef SCSLAB_CVC
+			else if (VersionChainIsNewToOld(scan->indexRelation)
+					&& scan->get_next_key)
+			{
+				/* remember one more key */
+				Assert(continuescan == false);
+				_bt_saveitem_nextkey(so, itemIndex, offnum, itup);
+				itemIndex++;
+			}
+#endif
 			/* When !continuescan, there can't be any more matches, so stop */
 			if (!continuescan)
 				break;
@@ -1702,6 +1728,17 @@ _bt_readpage(IndexScanDesc scan, ScanDirection dir, OffsetNumber offnum)
 
 			truncatt = BTreeTupleGetNAtts(itup, scan->indexRelation);
 			_bt_checkkeys(scan, itup, truncatt, dir, &continuescan);
+#ifdef SCSLAB_CVC
+			if (VersionChainIsNewToOld(scan->indexRelation)
+					&& scan->get_next_key)
+			{
+				if (continuescan == false)
+				{
+					/* We have to get one more key. */
+					continuescan = true;
+				}
+			}
+#endif
 		}
 
 		if (!continuescan)
@@ -1791,6 +1828,7 @@ _bt_saveitem(BTScanOpaque so, int itemIndex,
 #ifdef SCSLAB_CVC
 	currItem->tid = itup->t_heap_tid;
 	currItem->xid = itup->t_ancester_xid;
+	currItem->is_matched = true;
 #endif
 	if (so->currTuples)
 	{
@@ -1801,6 +1839,29 @@ _bt_saveitem(BTScanOpaque so, int itemIndex,
 		so->currPos.nextTupleOffset += MAXALIGN(itupsz);
 	}
 }
+#ifdef SCSLAB_CVC
+static void
+_bt_saveitem_nextkey(BTScanOpaque so, int itemIndex,
+			 OffsetNumber offnum, IndexTuple itup)
+{
+	BTScanPosItem *currItem = &so->currPos.items[itemIndex];
+
+	currItem->heapTid = itup->t_tid;
+	currItem->indexOffset = offnum;
+	currItem->tid = itup->t_heap_tid;
+	currItem->xid = itup->t_ancester_xid;
+	/* It does not satisfied scan key, but remember it to get next key. */
+	currItem->is_matched = false;
+	if (so->currTuples)
+	{
+		Size		itupsz = IndexTupleSize(itup);
+
+		currItem->tupleOffset = so->currPos.nextTupleOffset;
+		memcpy(so->currTuples + so->currPos.nextTupleOffset, itup, itupsz);
+		so->currPos.nextTupleOffset += MAXALIGN(itupsz);
+	}
+}
+#endif
 
 /*
  *	_bt_steppage() -- Step to next page containing valid data for scan
@@ -2410,10 +2471,17 @@ _bt_endpoint(IndexScanDesc scan, ScanDirection dir)
 	currItem = &so->currPos.items[so->currPos.itemIndex];
 	scan->xs_heaptid = currItem->heapTid;
 #ifdef SCSLAB_CVC
-	scan->xs_tid = currItem->tid;
-	scan->xs_xid = currItem->xid;
-	Assert(!VersionChainIsNewToOld(rel) || ItemPointerIsValid(&scan->xs_heaptid));
-	Assert(!VersionChainIsNewToOld(rel) || ItemPointerIsValid(&scan->xs_tid));
+	if (VersionChainIsNewToOld(rel))
+	{
+		/* Now, xs_tid is real heap tid and xs_heaptid is unique id. */
+		scan->xs_tid = currItem->tid;
+		scan->xs_xid = currItem->xid;
+		Assert(ItemPointerIsValid(&scan->xs_heaptid));
+		Assert(ItemPointerIsValid(&scan->xs_tid));
+
+		if (scan->get_next_key)
+			scan->end_scan = !currItem->is_matched;
+	}
 #endif
 	if (scan->xs_want_itup)
 		scan->xs_itup = (IndexTuple) (so->currTuples + currItem->tupleOffset);

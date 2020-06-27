@@ -1989,6 +1989,15 @@ tupconv_map_for_subplan(ModifyTableState *mtstate, int whichplan)
 	return mtstate->mt_per_subplan_tupconv_maps[whichplan];
 }
 
+#ifdef SCSLAB_CVC
+bool get_next_key = false;
+bool pass_index_scan;
+bool rightmost_key = false;
+ItemPointerData		current_key_heaptid;
+IndexTupleIdData	current_key_index_id;
+ItemPointerData		next_key_heaptid;
+IndexTupleIdData	next_key_index_id;
+#endif
 /* ----------------------------------------------------------------
  *	   ExecModifyTable
  *
@@ -2084,7 +2093,14 @@ ExecModifyTable(PlanState *pstate)
 		if (pstate->ps_ExprContext)
 			ResetExprContext(pstate->ps_ExprContext);
 
+#ifdef SCSLAB_CVC
+		get_next_key = true;
+		pass_index_scan = false;
+#endif
 		planSlot = ExecProcNode(subplanstate);
+#ifdef SCSLAB_CVC
+		get_next_key = false;
+#endif
 
 		if (TupIsNull(planSlot))
 		{
@@ -2253,8 +2269,14 @@ ExecModifyTable(PlanState *pstate)
 					}
 				}
 #endif
+#ifdef SCSLAB_CVC
+				get_next_key = true;
+#endif
 				slot = ExecUpdate(node, tupleid, oldtuple, slot, planSlot,
 								  &node->mt_epqstate, estate, node->canSetTag);
+#ifdef SCSLAB_CVC
+				get_next_key = false;
+#endif
 				break;
 			case CMD_DELETE:
 				slot = ExecDelete(node, tupleid, oldtuple, planSlot,

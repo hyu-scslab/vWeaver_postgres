@@ -653,6 +653,165 @@ index_fetch_heap(IndexScanDesc scan, TupleTableSlot *slot)
 bool
 index_getnext_slot(IndexScanDesc scan, ScanDirection direction, TupleTableSlot *slot)
 {
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(scan->indexRelation) && scan->get_next_key
+			&& curr_cmdtype == CMD_UPDATE)
+	{
+		Assert(!scan->xs_heap_continue);
+		/* It is worked on primary index. */
+		Assert(scan->indexRelation->rd_index->indisprimary);
+
+		pass_index_scan = true;
+
+		for (;;)
+		{
+			ItemPointer tid;
+
+			if (scan->end_scan)
+			{
+				break;
+			}
+
+			/* Time to fetch the next TID from the index */
+			tid = index_getnext_tid(scan, direction);
+
+			if (scan->first_scan)
+			{
+				/*
+				 * Move index cursor one more step because we also need the
+				 * next key's heap tid to link k_ridgy at update.
+				 */
+
+				if (tid == NULL)
+				{
+					/* There are any no index entries. */
+					break;
+				}
+
+				/* Store current cursor's info. */
+				/* Now, xs_heaptid is unique id of index entry
+				 * and xs_tid is real heap tid. */
+				next_key_heaptid = scan->xs_tid;
+				next_key_index_id.tid = scan->xs_heaptid;
+				next_key_index_id.xid = scan->xs_xid;
+				scan->first_scan = false;
+
+				/* And let's move it. */
+				tid = index_getnext_tid(scan, direction);
+			}
+
+			/*
+			 * Now, index cursor is place on one more next index entry.
+			 */
+
+			current_key_heaptid = next_key_heaptid;
+			current_key_index_id.tid = next_key_index_id.tid;
+			current_key_index_id.xid = next_key_index_id.xid;
+
+			if (tid != NULL)
+			{
+				/* Now, xs_heaptid is unique id of index entry
+				 * and xs_tid is real heap tid. */
+				next_key_heaptid = scan->xs_tid;
+				next_key_index_id.tid = scan->xs_heaptid;
+				next_key_index_id.xid = scan->xs_xid;
+				rightmost_key = false;
+			}
+			else
+			{
+				/* Current key is the right most key. */
+				scan->end_scan = true;
+				rightmost_key = true;
+			}
+
+			/* Now, xs_heaptid is unique id of index entry
+			 * and xs_tid is real heap tid. */
+			scan->xs_tid = current_key_heaptid;
+			scan->xs_heaptid = current_key_index_id.tid;
+			scan->xs_xid = current_key_index_id.xid;
+
+			slot->ituple_id.tid = scan->xs_heaptid;
+			slot->ituple_id.xid = scan->xs_xid;
+
+			/*
+			 * Fetch the next (or only) visible heap tuple for this index entry.
+			 * If we don't find anything, loop around and grab the next TID from
+			 * the index.
+			 */
+			Assert(ItemPointerIsValid(&scan->xs_heaptid));
+			if (index_fetch_heap(scan, slot))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+	else if (VersionChainIsNewToOld(scan->indexRelation))
+	{
+		for (;;)
+		{
+			if (!scan->xs_heap_continue)
+			{
+				ItemPointer tid;
+
+				/* Time to fetch the next TID from the index */
+				tid = index_getnext_tid(scan, direction);
+
+				/* If we're out of index entries, we're done */
+				if (tid == NULL)
+					break;
+			}
+
+			/* Now, xs_heaptid is unique id of index entry
+			 * and xs_tid is real heap tid. */
+			slot->ituple_id.tid = scan->xs_heaptid;
+			slot->ituple_id.xid = scan->xs_xid;
+
+			/*
+			 * Fetch the next (or only) visible heap tuple for this index entry.
+			 * If we don't find anything, loop around and grab the next TID from
+			 * the index.
+			 */
+			Assert(ItemPointerIsValid(&scan->xs_heaptid));
+			if (index_fetch_heap(scan, slot))
+				return true;
+		}
+
+		return false;
+	}
+	else
+	{
+		/* Original routine. */
+		for (;;)
+		{
+			if (!scan->xs_heap_continue)
+			{
+				ItemPointer tid;
+
+				/* Time to fetch the next TID from the index */
+				tid = index_getnext_tid(scan, direction);
+
+				/* If we're out of index entries, we're done */
+				if (tid == NULL)
+					break;
+
+				Assert(ItemPointerEquals(tid, &scan->xs_heaptid));
+			}
+
+			/*
+			 * Fetch the next (or only) visible heap tuple for this index entry.
+			 * If we don't find anything, loop around and grab the next TID from
+			 * the index.
+			 */
+			Assert(ItemPointerIsValid(&scan->xs_heaptid));
+			if (index_fetch_heap(scan, slot))
+				return true;
+		}
+
+		return false;
+	}
+#else
 	for (;;)
 	{
 		if (!scan->xs_heap_continue)
@@ -666,57 +825,21 @@ index_getnext_slot(IndexScanDesc scan, ScanDirection direction, TupleTableSlot *
 			if (tid == NULL)
 				break;
 
-#ifdef SCSLAB_CVC
-#else
 			Assert(ItemPointerEquals(tid, &scan->xs_heaptid));
-#endif
 		}
 
-#ifdef SCSLAB_CVC
-		//slot->ituple_id.tid = scan->xs_tid;
-		slot->ituple_id.tid = scan->xs_heaptid;
-		slot->ituple_id.xid = scan->xs_xid;
-#ifdef SCSLAB_CVC_DEBUG
-//		if (VersionChainIsNewToOld(scan->heapRelation)) {
-//			elog(WARNING, "[SCLSAB] index getnext slot %s, index tuple id : (%d, %d), "
-//					"heap tid : (%d, %d)",
-//					RelationGetRelationName(scan->indexRelation),
-//					ItemPointerGetBlockNumber(&scan->xs_heaptid),
-//					ItemPointerGetOffsetNumber(&scan->xs_heaptid),
-//					ItemPointerGetBlockNumber(&scan->xs_tid),
-//					ItemPointerGetOffsetNumber(&scan->xs_tid));
-//		}
-#endif
-#endif
 		/*
 		 * Fetch the next (or only) visible heap tuple for this index entry.
 		 * If we don't find anything, loop around and grab the next TID from
 		 * the index.
 		 */
 		Assert(ItemPointerIsValid(&scan->xs_heaptid));
-#ifdef SCSLAB_CVC
-		if (index_fetch_heap(scan, slot))
-		{
-#ifdef SCSLAB_CVC_DEBUG
-//			if (VersionChainIsNewToOld(scan->heapRelation)) {
-//				elog(WARNING, "[SCLSAB] after index fetch heap %s, index tuple id : (%d, %d), "
-//						"heap tid : (%d, %d)",
-//						RelationGetRelationName(scan->indexRelation),
-//						ItemPointerGetBlockNumber(&scan->xs_heaptid),
-//						ItemPointerGetOffsetNumber(&scan->xs_heaptid),
-//						ItemPointerGetBlockNumber(&scan->xs_tid),
-//						ItemPointerGetOffsetNumber(&scan->xs_tid));
-//			}
-#endif
-			return true;
-		}
-#else
 		if (index_fetch_heap(scan, slot))
 			return true;
-#endif
 	}
 
 	return false;
+#endif
 }
 
 /* ----------------

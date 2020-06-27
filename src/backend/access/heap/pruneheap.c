@@ -661,7 +661,6 @@ heap_prune_one(Relation relation, Buffer buffer, OffsetNumber offnum,
 		return 0;
 	}
 
-
 	htup = (HeapTupleHeader) PageGetItem(dp, lp);
 
 	tup.t_data = htup;

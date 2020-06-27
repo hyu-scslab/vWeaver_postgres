@@ -145,7 +145,6 @@ fetch_visible_tuple_with_vRidge(
 	expected_xmax = InvalidTransactionId;
 	same_page = false;
 
-
 	for (;;)
 	{
 		OffsetNumber	offnum;
@@ -227,6 +226,7 @@ fetch_visible_tuple_with_vRidge(
 		{
 			got_heap_tuple = true;
 			*tid = ctid;
+			slot->tts_tableOid = RelationGetRelid(scan->rel);
 			ExecStoreBufferHeapTuple(heapTuple, slot, buffer);
 
 			UnlockReleaseBuffer(buffer);
@@ -285,7 +285,7 @@ fetch_visible_tuple_with_vRidge(
 			 */
 			target_ptr = prev_ctid;
 			expected_xmin = InvalidTransactionId;
-			expected_xmax = HeapTupleHeaderGetXmin(heapTuple->t_data);
+			expected_xmax = HeapTupleHeaderGetRawXmin(heapTuple->t_data);
 		}
 
 		if (ItemPointerGetBlockNumber(&ctid) ==
@@ -406,6 +406,7 @@ fetch_visible_tuple(
 			*tid = ctid;
 #ifdef SCSLAB_CVC_VALIDATION
 #else
+			slot->tts_tableOid = RelationGetRelid(scan->rel);
 			ExecStoreBufferHeapTuple(heapTuple, slot, buffer);
 #endif
 

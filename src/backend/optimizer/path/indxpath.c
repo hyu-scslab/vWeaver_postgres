@@ -254,6 +254,12 @@ create_index_paths(PlannerInfo *root, RelOptInfo *rel)
 
 		/* Protect limited-size array in IndexClauseSets */
 		Assert(index->nkeycolumns <= INDEX_MAX_KEYS);
+#ifdef SCSLAB_CVC
+		if (root->parse->commandType == CMD_UPDATE && !index->unique)
+		{
+			continue;
+		}
+#endif
 
 		/*
 		 * Ignore partial indexes that do not match the query.

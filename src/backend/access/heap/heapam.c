@@ -69,6 +69,9 @@
 #include "utils/snapmgr.h"
 #include "utils/spccache.h"
 
+#ifdef SCSLAB_CVC
+CmdType curr_cmdtype;
+#endif
 
 static HeapTuple heap_prepare_insert(Relation relation, HeapTuple tup,
 									 TransactionId xid, CommandId cid, int options);
@@ -2930,10 +2933,7 @@ find_vRidge_target(
 	Page			page;
 	OffsetNumber	offnum;
 	ItemId			lp;
-	TransactionId	prior_xid;
 	bool			invalid;
-
-	prior_xid = current_xid;
 
 	for (;;)
 	{
@@ -2985,17 +2985,15 @@ find_vRidge_target(
 		 * After following a t_ctid link, we might arrive at an unrelated
 		 * tuple.  Check for XMIN match.
 		 */
-		if (TransactionIdIsValid(prior_xid) &&
-			!TransactionIdEquals(prior_xid,
-				HeapTupleHeaderGetXmin(heap_tuple.t_data)))
+		if (TransactionIdIsValid(current_xid) &&
+			!TransactionIdEquals(current_xid,
+				HeapTupleHeaderGetRawXmin(heap_tuple.t_data)))
 		{
 			/* Maybe vacuum? or something? */
 			invalid = true;
 			UnlockReleaseBuffer(buffer);
 			break;
 		}
-
-		prior_xid = current_xid;
 
 		/* Maybe?? safe tuple??? */
 		current_xid = heap_tuple.t_data->t_vRidge_xid;
@@ -3017,6 +3015,189 @@ find_vRidge_target(
 	*find_level = current_level;
 
 	return;
+}
+
+static ItemPointerData
+find_kRidge_target(
+		Relation	relation,
+		ItemPointer	nextkeytid,
+		Snapshot	snapshot)
+{
+	Buffer			buffer;
+	Page			page;
+
+	bool			got_heap_tuple = false;
+	bool			same_page;
+
+	ItemPointerData	ctid;
+	TransactionId	expected_xmin = InvalidTransactionId;
+	TransactionId	expected_xmax = InvalidTransactionId;
+
+	if (!get_next_key || rightmost_key || !pass_index_scan)
+	{
+		ItemPointerSetInvalid(&ctid);
+		return ctid;
+	}
+
+
+	ctid = *nextkeytid;
+
+	for (;;)
+	{
+		OffsetNumber	offnum;
+		ItemId			lp;
+
+		HeapTupleData	heapTuple;
+
+		ItemPointerData	prev_ctid;
+		ItemPointerData	vRidge_ptr;
+		TransactionId	vRidge_xid;
+		ItemPointerData	target_ptr;
+
+		bool			valid;
+
+		if (!same_page)
+		{
+			/*
+			 * Read, pin, and lock the page.
+			 */
+			buffer = ReadBuffer(relation, ItemPointerGetBlockNumber(&ctid));
+			LockBuffer(buffer, BUFFER_LOCK_SHARE);
+			page = BufferGetPage(buffer);
+		}
+
+		offnum = ItemPointerGetOffsetNumber(&ctid);
+		if (offnum < FirstOffsetNumber || offnum > PageGetMaxOffsetNumber(page))
+		{
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+		lp = PageGetItemId(page, offnum);
+		if (!ItemIdIsNormal(lp))
+		{
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		/* OK to access the tuple */
+		heapTuple.t_self = ctid;
+		heapTuple.t_data = (HeapTupleHeader) PageGetItem(page, lp);
+		heapTuple.t_len = ItemIdGetLength(lp);
+		heapTuple.t_tableOid = RelationGetRelid(relation);
+
+		/*
+		 * After following a t_ctid or vRidge link, we might arrive
+		 * at an unrelated tuple. Check for xid match.
+		 */
+		if (TransactionIdIsValid(expected_xmax) &&
+				!TransactionIdEquals(expected_xmax,
+				HeapTupleHeaderGetUpdateXid(heapTuple.t_data)))
+		{
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+		if (TransactionIdIsValid(expected_xmin) &&
+				!TransactionIdEquals(expected_xmin,
+				HeapTupleHeaderGetRawXmin(heapTuple.t_data)))
+		{
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		/*
+		 * Check tuple visibility; if visible, set it as the new result
+		 * candidate.
+		 */
+		valid = HeapTupleSatisfiesVisibility(&heapTuple, snapshot, buffer);
+		CheckForSerializableConflictOut(valid, relation, &heapTuple, buffer, snapshot);
+		if (valid)
+		{
+			got_heap_tuple = true;
+
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		/* I hope hint bit for checking committed has set in
+		 * HeapTupleSatisfiesUpdate(). */
+		if (HeapTupleHeaderXminCommitted(heapTuple.t_data) &&
+				!XidInMVCCSnapshot(HeapTupleHeaderGetRawXmin(
+						heapTuple.t_data), snapshot))
+		{
+			/*
+			 * Transaction who created this version is not in snapshot
+			 * but this version is invisible. It means this record is deleted.
+			 * This version is invisible to this transacion, but it would be
+			 * visible for another transaction who use k_ridge.
+			 */
+#ifdef SCSLAB_CVC_DEBUG
+			elog(WARNING, "[SCSLAB] deleted version %s",
+					RelationGetRelationName(relation));
+#endif
+			got_heap_tuple = true;
+
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		/*
+		 * Check whether this tuple is the first inserted one or not.
+		 * If it is the one, no more chain to traverse.
+		 */
+		prev_ctid = heapTuple.t_data->t_ctid_prev;
+		if (ItemPointerEquals(&ctid, &prev_ctid))
+		{
+			UnlockReleaseBuffer(buffer);
+			break;
+		}
+
+		vRidge_ptr = heapTuple.t_data->t_vRidge_ptr;
+		vRidge_xid = heapTuple.t_data->t_vRidge_xid;
+
+		if (TransactionIdIsValid(vRidge_xid) &&
+				XidInMVCCSnapshot(vRidge_xid, snapshot)) {
+			/*
+			 * vRidge-pointing-tuple is invisible for this snapshot.
+			 * It is safe to go there.
+			 */
+			target_ptr = vRidge_ptr;
+			expected_xmin = vRidge_xid;
+			expected_xmax = InvalidTransactionId;
+		}
+		else
+		{
+			/*
+			 * vRidge-pointing-tuple is in-progress for this snapshot.
+			 * It is unsafe to go there.
+			 * Just go one step to prev(older).
+			 * TODO: If we can know the xmax of vRidge-pointer-tuple in here,
+			 *       we can find more tightly visible tuple.
+			 */
+			target_ptr = prev_ctid;
+			expected_xmin = InvalidTransactionId;
+			expected_xmax = HeapTupleHeaderGetRawXmin(heapTuple.t_data);
+		}
+
+		if (ItemPointerGetBlockNumber(&ctid) ==
+				ItemPointerGetBlockNumber(&target_ptr)) {
+			same_page = true;
+		} else {
+			same_page = false;
+			UnlockReleaseBuffer(buffer);
+		}
+
+		ctid = target_ptr;
+	}
+
+	if (got_heap_tuple)
+	{
+		return ctid;
+	}
+	else
+	{
+		ItemPointerSetInvalid(&ctid);
+		return ctid;
+	}
 }
 #endif
 /*
@@ -3980,7 +4161,7 @@ l2:
 	 */
 
 	/*
-	 * Build vRidge.
+	 * Build v_ridgy and k_ridgy.
 	 */
 	if (VersionChainIsNewToOld(relation))
 	{
@@ -3991,6 +4172,9 @@ l2:
 		HeapTupleData	heap_tuple;
 		Coin			coin;
 
+		ItemPointerData	kRidge_ptr;
+
+		/* v_ridgy */
 		coin = CoinToss();
 
 		if (CoinIsFront(coin))
@@ -4018,6 +4202,44 @@ l2:
 			newtup_vRidge_level = oldtup_level;
 		}
 
+		/* k_ridgy */
+		if (get_next_key)
+		{
+			ItemPointer		nextkeytup;
+
+			nextkeytup = &next_key_heaptid;
+			kRidge_ptr = find_kRidge_target(
+					relation,
+					nextkeytup,
+					GetTransactionSnapshot());
+		}
+		else
+		{
+			ItemPointerSetInvalid(&kRidge_ptr);
+		}
+
+		/* old tuple */
+		/* Latch the buffer containing the new tuple. */
+		buffer = ReadBuffer(relation,
+				ItemPointerGetBlockNumber(otid));
+		LockBuffer(buffer, BUFFER_LOCK_EXCLUSIVE);
+		page = BufferGetPage(buffer);
+
+		offnum = ItemPointerGetOffsetNumber(otid);
+		lp = PageGetItemId(page, offnum);
+
+		/* OK to access the tuple. */
+		heap_tuple.t_data = (HeapTupleHeader) PageGetItem(page, lp);
+
+		/* link k_ridgy. */
+		heap_tuple.t_data->t_kRidge_ptr = kRidge_ptr;
+
+		/* It is not essential to make these fields durable. */
+		/* Don't write redo log. Don't mark dirty. */
+		UnlockReleaseBuffer(buffer);
+
+
+		/* new tuple */
 		/* Latch the buffer containing the new tuple. */
 		buffer = ReadBuffer(relation,
 				ItemPointerGetBlockNumber(&heaptup->t_self));
@@ -4030,6 +4252,7 @@ l2:
 		/* OK to access the tuple. */
 		heap_tuple.t_data = (HeapTupleHeader) PageGetItem(page, lp);
 
+		/* link v_ridgy. */
 		heap_tuple.t_data->t_level = newtup_level;
 		heap_tuple.t_data->t_vRidge_ptr = newtup_vRidge_ptr;
 		heap_tuple.t_data->t_vRidge_xid = newtup_vRidge_xid;
