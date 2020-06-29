@@ -257,6 +257,8 @@ create_index_paths(PlannerInfo *root, RelOptInfo *rel)
 #ifdef SCSLAB_CVC
 		if (root->parse->commandType == CMD_UPDATE && !index->unique)
 		{
+			/* Force to always use primary index when find will-updated-tuple
+			 * at update query. */
 			continue;
 		}
 #endif

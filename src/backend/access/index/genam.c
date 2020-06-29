@@ -135,6 +135,10 @@ RelationGetIndexScan(Relation indexRelation, int nkeys, int norderbys)
 	{
 		scan->get_next_key = false;
 	}
+	scan->need_k_ridgy = false;
+	ItemPointerSetInvalid(&scan->xs_k_ridgy_heaptid);
+	ItemPointerSetInvalid(&scan->xs_k_ridgy_itup_id.tid);
+	scan->xs_k_ridgy_itup_id.xid = InvalidTransactionId;
 #endif
 
 	return scan;

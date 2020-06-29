@@ -2918,16 +2918,16 @@ simple_heap_delete(Relation relation, ItemPointer tid)
 }
 
 #ifdef SCSLAB_CVC
-void
+static void
 find_vRidge_target(
 		Relation			relation,
 		Level 				level,
 		TransactionId		current_xid,
 		ItemPointerData		current_ptr,
 		Level				current_level,
-		TransactionId		*find_xid,
-		ItemPointerData		*find_ptr,
-		Level				*find_level)
+		TransactionId		*find_xid,		/* ret */
+		ItemPointerData		*find_ptr,		/* ret */
+		Level				*find_level)	/* ret */
 {
 	Buffer			buffer;
 	Page			page;
@@ -2951,6 +2951,8 @@ find_vRidge_target(
 			invalid = false;
 			break;
 		}
+
+		Assert(ItemPointerIsValid(&current_ptr));
 
 		/* Read, pin, and lock the page. */
 		buffer = ReadBuffer(relation, ItemPointerGetBlockNumber(&current_ptr));
@@ -3017,11 +3019,13 @@ find_vRidge_target(
 	return;
 }
 
-static ItemPointerData
+static void
 find_kRidge_target(
 		Relation	relation,
 		ItemPointer	nextkeytid,
-		Snapshot	snapshot)
+		Snapshot	snapshot,
+		ItemPointerData*	kRidge_ptr,		/* ret */
+		IndexTupleIdData*	kRidge_itup_id)	/* ret */
 {
 	Buffer			buffer;
 	Page			page;
@@ -3029,18 +3033,22 @@ find_kRidge_target(
 	bool			got_heap_tuple = false;
 	bool			same_page;
 
-	ItemPointerData	ctid;
+	ItemPointerData		ctid;
+	IndexTupleIdData	citup_id;
 	TransactionId	expected_xmin = InvalidTransactionId;
 	TransactionId	expected_xmax = InvalidTransactionId;
 
 	if (!get_next_key || rightmost_key || !pass_index_scan)
 	{
-		ItemPointerSetInvalid(&ctid);
-		return ctid;
+		ItemPointerSetInvalid(kRidge_ptr);
+		ItemPointerSetInvalid(&kRidge_itup_id->tid);
+		kRidge_itup_id->xid = InvalidTransactionId;
+
+		return;
 	}
 
-
 	ctid = *nextkeytid;
+	same_page = false;
 
 	for (;;)
 	{
@@ -3055,6 +3063,8 @@ find_kRidge_target(
 		ItemPointerData	target_ptr;
 
 		bool			valid;
+
+		Assert(ItemPointerIsValid(&ctid));
 
 		if (!same_page)
 		{
@@ -3084,6 +3094,7 @@ find_kRidge_target(
 		heapTuple.t_data = (HeapTupleHeader) PageGetItem(page, lp);
 		heapTuple.t_len = ItemIdGetLength(lp);
 		heapTuple.t_tableOid = RelationGetRelid(relation);
+		citup_id = heapTuple.t_data->t_itup_id;
 
 		/*
 		 * After following a t_ctid or vRidge link, we might arrive
@@ -3191,12 +3202,14 @@ find_kRidge_target(
 
 	if (got_heap_tuple)
 	{
-		return ctid;
+		*kRidge_ptr = ctid;
+		*kRidge_itup_id = citup_id;
 	}
 	else
 	{
-		ItemPointerSetInvalid(&ctid);
-		return ctid;
+		ItemPointerSetInvalid(kRidge_ptr);
+		ItemPointerSetInvalid(&kRidge_itup_id->tid);
+		kRidge_itup_id->xid = InvalidTransactionId;
 	}
 }
 #endif
@@ -4029,8 +4042,37 @@ l2:
 	}
 #endif
 #ifdef SCSLAB_CVC
-	/* Link new to old. */
-	heaptup->t_data->t_ctid_prev = oldtup.t_self;
+	if (VersionChainIsNewToOld(relation))
+	{
+		/* Link new to old. */
+		heaptup->t_data->t_ctid_prev = oldtup.t_self;
+		newtup->t_data->t_ctid_prev = oldtup.t_self;
+
+		if (pass_index_scan)
+		{
+			heaptup->t_data->t_itup_id.tid = current_key_index_id.tid;
+			heaptup->t_data->t_itup_id.xid = current_key_index_id.xid;
+			newtup->t_data->t_itup_id.tid = current_key_index_id.tid;
+			newtup->t_data->t_itup_id.xid = current_key_index_id.xid;
+		}
+		else
+		{
+			ItemPointerSetInvalid(&heaptup->t_data->t_itup_id.tid);
+			ItemPointerSetInvalid(&newtup->t_data->t_itup_id.tid);
+			heaptup->t_data->t_itup_id.xid = InvalidTransactionId;
+			newtup->t_data->t_itup_id.xid = InvalidTransactionId;
+		}
+	}
+	else
+	{
+		ItemPointerSetInvalid(&heaptup->t_data->t_ctid_prev);
+		ItemPointerSetInvalid(&newtup->t_data->t_ctid_prev);
+		ItemPointerSetInvalid(&heaptup->t_data->t_itup_id.tid);
+		ItemPointerSetInvalid(&newtup->t_data->t_itup_id.tid);
+		heaptup->t_data->t_itup_id.xid = InvalidTransactionId;
+		newtup->t_data->t_itup_id.xid = InvalidTransactionId;
+	}
+
 #endif
 
 #ifdef SCSLAB_CVC
@@ -4067,13 +4109,16 @@ l2:
 #endif
 #endif
 #ifdef SCSLAB_CVC
-	oldtup_vRidge_xid = oldtup.t_data->t_vRidge_xid;
-	oldtup_vRidge_ptr = oldtup.t_data->t_vRidge_ptr;
-	oldtup_vRidge_level = oldtup.t_data->t_vRidge_level;
+	if (VersionChainIsNewToOld(relation))
+	{
+		oldtup_vRidge_xid = oldtup.t_data->t_vRidge_xid;
+		oldtup_vRidge_ptr = oldtup.t_data->t_vRidge_ptr;
+		oldtup_vRidge_level = oldtup.t_data->t_vRidge_level;
 
-	oldtup_xid = HeapTupleHeaderGetRawXmin(oldtup.t_data);
-	oldtup_ptr = oldtup.t_self;
-	oldtup_level = oldtup.t_data->t_level;
+		oldtup_xid = HeapTupleHeaderGetRawXmin(oldtup.t_data);
+		oldtup_ptr = oldtup.t_self;
+		oldtup_level = oldtup.t_data->t_level;
+	}
 #endif
 
 	/* clear PD_ALL_VISIBLE flags, reset all visibilitymap bits */
@@ -4172,7 +4217,8 @@ l2:
 		HeapTupleData	heap_tuple;
 		Coin			coin;
 
-		ItemPointerData	kRidge_ptr;
+		ItemPointerData		kRidge_ptr;
+		IndexTupleIdData	kRidge_itup_id;
 
 		/* v_ridgy */
 		coin = CoinToss();
@@ -4208,10 +4254,12 @@ l2:
 			ItemPointer		nextkeytup;
 
 			nextkeytup = &next_key_heaptid;
-			kRidge_ptr = find_kRidge_target(
+			find_kRidge_target(
 					relation,
 					nextkeytup,
-					GetTransactionSnapshot());
+					GetTransactionSnapshot(),
+					&kRidge_ptr,
+					&kRidge_itup_id);
 		}
 		else
 		{
@@ -4233,6 +4281,7 @@ l2:
 
 		/* link k_ridgy. */
 		heap_tuple.t_data->t_kRidge_ptr = kRidge_ptr;
+		heap_tuple.t_data->t_kRidge_itup_id = kRidge_itup_id;
 
 		/* It is not essential to make these fields durable. */
 		/* Don't write redo log. Don't mark dirty. */

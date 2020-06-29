@@ -113,6 +113,62 @@ heapam_index_fetch_end(IndexFetchTableData *scan)
 	pfree(hscan);
 }
 #ifdef SCSLAB_CVC
+static void
+get_prev_version_k_ridgy(
+		Relation			relation,
+		ItemPointer			prev_tid,
+		IndexTupleIdData*	prev_k_ridgy_itup_id,	/* ret */
+		ItemPointerData*	prev_k_ridgy_heaptid	/* ret */
+		)
+{
+	Buffer			buffer;
+	Page			page;
+	OffsetNumber	offnum;
+	ItemId			lp;
+
+	HeapTupleData	heap_tuple;
+
+	Assert(ItemPointerIsValid(prev_tid));
+
+	/* init */
+	ItemPointerSetInvalid(&prev_k_ridgy_itup_id->tid);
+	ItemPointerSetInvalid(prev_k_ridgy_heaptid);
+	prev_k_ridgy_itup_id->xid = InvalidTransactionId;
+
+	/* Read, pin, and lock the page. */
+	buffer = ReadBuffer(relation, ItemPointerGetBlockNumber(prev_tid));
+	LockBuffer(buffer, BUFFER_LOCK_SHARE);
+	page = BufferGetPage(buffer);
+
+	offnum = ItemPointerGetOffsetNumber(prev_tid);
+	if (offnum < FirstOffsetNumber || offnum > PageGetMaxOffsetNumber(page))
+	{
+		/* Maybe vacuum? or something? */
+		goto end;
+	}
+
+	lp = PageGetItemId(page, offnum);
+	if (!ItemIdIsNormal(lp))
+	{
+		/* Maybe vacuum? or something? */
+		goto end;
+	}
+
+	/* OK to access the tuple. */
+	heap_tuple.t_self = *prev_tid;
+	heap_tuple.t_data = (HeapTupleHeader) PageGetItem(page, lp);
+	heap_tuple.t_len = ItemIdGetLength(lp);
+	//heap_tuple.t_tableOid = RelationGetRelid(relation);
+
+	/* Maybe?? safe tuple??? */
+	*prev_k_ridgy_itup_id = heap_tuple.t_data->t_kRidge_itup_id;
+	*prev_k_ridgy_heaptid = heap_tuple.t_data->t_kRidge_ptr;
+
+end:
+
+	UnlockReleaseBuffer(buffer);
+}
+
 /*
  * Get a visible version(tuple) by tranversing with vRidge.
  * This code refers to heap_get_latest_tid().
@@ -230,6 +286,13 @@ fetch_visible_tuple_with_vRidge(
 			ExecStoreBufferHeapTuple(heapTuple, slot, buffer);
 
 			UnlockReleaseBuffer(buffer);
+
+			get_prev_version_k_ridgy(
+					relation,
+					&heapTuple->t_data->t_ctid,
+					&slot->k_ridgy_itup_id,
+					&slot->k_ridgy_heaptid);
+
 			break;
 		}
 
@@ -411,6 +474,13 @@ fetch_visible_tuple(
 #endif
 
 			UnlockReleaseBuffer(buffer);
+
+			get_prev_version_k_ridgy(
+					relation,
+					&heapTuple->t_data->t_ctid,
+					&slot->k_ridgy_itup_id,
+					&slot->k_ridgy_heaptid);
+
 			break;
 		}
 

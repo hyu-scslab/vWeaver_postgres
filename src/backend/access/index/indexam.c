@@ -747,8 +747,75 @@ index_getnext_slot(IndexScanDesc scan, ScanDirection direction, TupleTableSlot *
 
 		return false;
 	}
+	else if (VersionChainIsNewToOld(scan->indexRelation)
+			&& curr_cmdtype == CMD_SELECT
+			&& scan->indexRelation->rd_index->indisprimary)
+	{
+		/* Index scan with k_ridgy. */
+		Assert(!scan->xs_heap_continue);
+
+		for (;;)
+		{
+			ItemPointer tid;
+			bool		ret;
+
+			/* Time to fetch the next TID from the index */
+			tid = index_getnext_tid(scan, direction);
+
+			/* If we're out of index entries, we're done */
+			if (tid == NULL)
+			{
+				break;
+			}
+
+			if (scan->xs_k_ridgy_itup_id.xid != InvalidTransactionId)
+			{
+				/* k_ridgy was set. */
+				Assert(ItemPointerIsValid(&scan->xs_k_ridgy_itup_id.tid));
+				Assert(ItemPointerIsValid(&scan->xs_k_ridgy_heaptid));
+
+				if (!ItemPointerEquals(&scan->xs_heaptid,
+							&scan->xs_k_ridgy_itup_id.tid)
+						|| scan->xs_xid != scan->xs_k_ridgy_itup_id.xid)
+				{
+					/* phantom? */
+					continue;
+				}
+
+				elog(WARNING, "[SCSLAB] use k_ridgy");
+				scan->xs_tid = scan->xs_k_ridgy_heaptid;
+			}
+
+			/*
+			 * Fetch the next (or only) visible heap tuple for this index entry.
+			 * If we don't find anything, loop around and grab the next TID from
+			 * the index.
+			 */
+			Assert(ItemPointerIsValid(&scan->xs_tid));
+			scan->need_k_ridgy = true;
+			ret = index_fetch_heap(scan, slot);
+			scan->need_k_ridgy = false;
+			if (ret)
+			{
+				scan->xs_k_ridgy_heaptid = slot->k_ridgy_heaptid;
+				scan->xs_k_ridgy_itup_id = slot->k_ridgy_itup_id;
+				return true;
+			}
+			else
+			{
+				ItemPointerSetInvalid(&scan->xs_k_ridgy_heaptid);
+				ItemPointerSetInvalid(&scan->xs_k_ridgy_itup_id.tid);
+				scan->xs_k_ridgy_itup_id.xid = InvalidTransactionId;
+			}
+		}
+
+		return false;
+
+
+	}
 	else if (VersionChainIsNewToOld(scan->indexRelation))
 	{
+		/* Path for simple index scan not related to k_ridgy. */
 		for (;;)
 		{
 			if (!scan->xs_heap_continue)

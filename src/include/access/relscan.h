@@ -141,6 +141,10 @@ typedef struct IndexScanDescData
 	bool		get_next_key;
 	bool		first_scan;
 	bool		end_scan;
+
+	bool		need_k_ridgy;
+	ItemPointerData		xs_k_ridgy_heaptid;
+	IndexTupleIdData	xs_k_ridgy_itup_id;
 #endif
 	ItemPointerData xs_heaptid; /* result */
 	bool		xs_heap_continue;	/* T if must keep walking, potential

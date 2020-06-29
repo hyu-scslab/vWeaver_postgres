@@ -2276,6 +2276,7 @@ ExecModifyTable(PlanState *pstate)
 								  &node->mt_epqstate, estate, node->canSetTag);
 #ifdef SCSLAB_CVC
 				get_next_key = false;
+				pass_index_scan = false;
 #endif
 				break;
 			case CMD_DELETE:

@@ -19,6 +19,9 @@
 #include "access/tupmacs.h"
 #include "access/transam.h"
 #include "storage/bufpage.h"
+#ifdef SCSLAB_CVC
+#include "access/itup.h"
+#endif
 
 /*
  * MaxTupleAttributeNumber limits the number of (user) columns in a tuple.
@@ -208,7 +211,9 @@ struct HeapTupleHeaderData
 	Level			t_vRidge_level;
 
 	/* Fields for kRidge */
-	ItemPointerData	t_kRidge_ptr;
+	IndexTupleIdData	t_itup_id;
+	ItemPointerData		t_kRidge_ptr;
+	IndexTupleIdData	t_kRidge_itup_id;
 #endif
 
 	/* Fields below here must match MinimalTupleData! */

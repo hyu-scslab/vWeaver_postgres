@@ -87,6 +87,9 @@ RelationPutHeapTuple(Relation relation,
 			ItemPointerSetInvalid(&item->t_vRidge_ptr);
 			item->t_vRidge_xid = InvalidTransactionId;
 			item->t_vRidge_level = InvalidLevel;
+			ItemPointerSetInvalid(&item->t_kRidge_ptr);
+			item->t_itup_id.tid = tuple->t_self;
+			item->t_itup_id.xid = InvalidTransactionId;
 		}
 #endif
 	}

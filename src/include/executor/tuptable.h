@@ -135,13 +135,15 @@ typedef struct TupleTableSlot
 #ifdef SCSLAB_CVC
 	/*
 	 * Unique id for each index entry.
+	 * This is used at update query.
 	 */
 	IndexTupleIdData	ituple_id;
 
 	/*
-	 * Tid of next key k_ridge.
+	 * These are used at scan query.
 	 */
-	ItemPointerData		next_key_tid;
+	ItemPointerData		k_ridgy_heaptid;
+	IndexTupleIdData	k_ridgy_itup_id;
 #endif
 } TupleTableSlot;
 
