@@ -3038,17 +3038,18 @@ find_kRidge_target(
 	TransactionId	expected_xmin = InvalidTransactionId;
 	TransactionId	expected_xmax = InvalidTransactionId;
 
-	if (!get_next_key || rightmost_key || !pass_index_scan)
+	ctid = *nextkeytid;
+	same_page = false;
+
+	if (!ItemPointerIsValid(&ctid))
 	{
+		/* No next key. This maybe the right most key */
 		ItemPointerSetInvalid(kRidge_ptr);
 		ItemPointerSetInvalid(&kRidge_itup_id->tid);
 		kRidge_itup_id->xid = InvalidTransactionId;
 
 		return;
 	}
-
-	ctid = *nextkeytid;
-	same_page = false;
 
 	for (;;)
 	{
@@ -4048,20 +4049,10 @@ l2:
 		heaptup->t_data->t_ctid_prev = oldtup.t_self;
 		newtup->t_data->t_ctid_prev = oldtup.t_self;
 
-		if (pass_index_scan)
-		{
-			heaptup->t_data->t_itup_id.tid = current_key_index_id.tid;
-			heaptup->t_data->t_itup_id.xid = current_key_index_id.xid;
-			newtup->t_data->t_itup_id.tid = current_key_index_id.tid;
-			newtup->t_data->t_itup_id.xid = current_key_index_id.xid;
-		}
-		else
-		{
-			ItemPointerSetInvalid(&heaptup->t_data->t_itup_id.tid);
-			ItemPointerSetInvalid(&newtup->t_data->t_itup_id.tid);
-			heaptup->t_data->t_itup_id.xid = InvalidTransactionId;
-			newtup->t_data->t_itup_id.xid = InvalidTransactionId;
-		}
+		heaptup->t_data->t_itup_id.tid = current_key_index_id.tid;
+		heaptup->t_data->t_itup_id.xid = current_key_index_id.xid;
+		newtup->t_data->t_itup_id.tid = current_key_index_id.tid;
+		newtup->t_data->t_itup_id.xid = current_key_index_id.xid;
 	}
 	else
 	{
@@ -4220,6 +4211,8 @@ l2:
 		ItemPointerData		kRidge_ptr;
 		IndexTupleIdData	kRidge_itup_id;
 
+		ItemPointer		nextkeytup;
+
 		/* v_ridgy */
 		coin = CoinToss();
 
@@ -4249,22 +4242,13 @@ l2:
 		}
 
 		/* k_ridgy */
-		if (get_next_key)
-		{
-			ItemPointer		nextkeytup;
-
-			nextkeytup = &next_key_heaptid;
-			find_kRidge_target(
-					relation,
-					nextkeytup,
-					GetTransactionSnapshot(),
-					&kRidge_ptr,
-					&kRidge_itup_id);
-		}
-		else
-		{
-			ItemPointerSetInvalid(&kRidge_ptr);
-		}
+		nextkeytup = &next_key_heaptid;
+		find_kRidge_target(
+				relation,
+				nextkeytup,
+				GetTransactionSnapshot(),
+				&kRidge_ptr,
+				&kRidge_itup_id);
 
 		/* old tuple */
 		/* Latch the buffer containing the new tuple. */

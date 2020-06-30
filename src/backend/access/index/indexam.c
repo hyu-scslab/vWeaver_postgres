@@ -654,14 +654,11 @@ bool
 index_getnext_slot(IndexScanDesc scan, ScanDirection direction, TupleTableSlot *slot)
 {
 #ifdef SCSLAB_CVC
-	if (VersionChainIsNewToOld(scan->indexRelation) && scan->get_next_key
-			&& curr_cmdtype == CMD_UPDATE)
+	if (VersionChainIsNewToOld(scan->indexRelation) && curr_cmdtype == CMD_UPDATE)
 	{
 		Assert(!scan->xs_heap_continue);
 		/* It is worked on primary index. */
 		Assert(scan->indexRelation->rd_index->indisprimary);
-
-		pass_index_scan = true;
 
 		for (;;)
 		{
@@ -715,13 +712,14 @@ index_getnext_slot(IndexScanDesc scan, ScanDirection direction, TupleTableSlot *
 				next_key_heaptid = scan->xs_tid;
 				next_key_index_id.tid = scan->xs_heaptid;
 				next_key_index_id.xid = scan->xs_xid;
-				rightmost_key = false;
 			}
 			else
 			{
 				/* Current key is the right most key. */
 				scan->end_scan = true;
-				rightmost_key = true;
+				ItemPointerSetInvalid(&next_key_heaptid);
+				ItemPointerSetInvalid(&next_key_index_id.tid);
+				next_key_index_id.xid = InvalidTransactionId;
 			}
 
 			/* Now, xs_heaptid is unique id of index entry
@@ -782,7 +780,7 @@ index_getnext_slot(IndexScanDesc scan, ScanDirection direction, TupleTableSlot *
 					continue;
 				}
 
-				elog(WARNING, "[SCSLAB] use k_ridgy");
+				//elog(WARNING, "[SCSLAB] use k_ridgy");
 				scan->xs_tid = scan->xs_k_ridgy_heaptid;
 			}
 

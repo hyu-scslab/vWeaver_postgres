@@ -32,6 +32,9 @@
 #include "executor/execdebug.h"
 #include "executor/nodeSeqscan.h"
 #include "utils/rel.h"
+#ifdef SCSLAB_CVC
+#include "access/genam.h"
+#endif
 
 static TupleTableSlot *SeqNext(SeqScanState *node);
 
@@ -49,6 +52,99 @@ static TupleTableSlot *SeqNext(SeqScanState *node);
 static TupleTableSlot *
 SeqNext(SeqScanState *node)
 {
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(node->ss.ss_currentRelation))
+	{
+		/* Use index to use vWeaver. */
+		EState	   *estate;
+		ScanDirection direction;
+		IndexScanDesc scandesc;
+		TupleTableSlot *slot;
+
+		/*
+		 * extract necessary information from index scan node
+		 */
+		estate = node->ss.ps.state;
+		direction = estate->es_direction;
+		scandesc = node->iss_ScanDesc;
+		slot = node->ss.ss_ScanTupleSlot;
+
+		if (scandesc == NULL)
+		{
+			/*
+			 * We reach here if the index scan is not parallel, or if we're
+			 * serially executing an index scan that was planned to be parallel.
+			 */
+			scandesc = index_beginscan(node->ss.ss_currentRelation, /* heap relation */
+									   node->primary_index, /* index relation */
+									   estate->es_snapshot,
+									   0,
+									   0);
+
+			node->iss_ScanDesc = scandesc;
+
+			/*
+			 * If no run-time keys to calculate or they are ready, go ahead and
+			 * pass the scankeys to the index AM.
+			 */
+			//if (node->iss_NumRuntimeKeys == 0 || node->iss_RuntimeKeysReady)
+			index_rescan(scandesc, NULL, 0, 0, 0);
+		}
+
+		/*
+		 * ok, now that we have what we need, fetch the next tuple.
+		 */
+		while (index_getnext_slot(scandesc, direction, slot))
+		{
+			//CHECK_FOR_INTERRUPTS();
+
+			return slot;
+		}
+
+		/*
+		 * if we get here it means the index scan failed so we are at the end of
+		 * the scan..
+		 */
+		//node->iss_ReachedEnd = true;
+		ExecClearTuple(slot);
+		return NULL;
+	}
+	else
+	{
+		/* original routine */
+		TableScanDesc scandesc;
+		EState	   *estate;
+		ScanDirection direction;
+		TupleTableSlot *slot;
+
+		/*
+		 * get information from the estate and scan state
+		 */
+		scandesc = node->ss.ss_currentScanDesc;
+		estate = node->ss.ps.state;
+		direction = estate->es_direction;
+		slot = node->ss.ss_ScanTupleSlot;
+
+		if (scandesc == NULL)
+		{
+			/*
+			 * We reach here if the scan is not parallel, or if we're serially
+			 * executing a scan that was planned to be parallel.
+			 */
+			scandesc = table_beginscan(node->ss.ss_currentRelation,
+									   estate->es_snapshot,
+									   0, NULL);
+			node->ss.ss_currentScanDesc = scandesc;
+		}
+
+		/*
+		 * get the next tuple from the table
+		 */
+		if (table_scan_getnextslot(scandesc, direction, slot))
+			return slot;
+		return NULL;
+	}
+#else
 	TableScanDesc scandesc;
 	EState	   *estate;
 	ScanDirection direction;
@@ -80,6 +176,7 @@ SeqNext(SeqScanState *node)
 	if (table_scan_getnextslot(scandesc, direction, slot))
 		return slot;
 	return NULL;
+#endif
 }
 
 /*
@@ -170,6 +267,22 @@ ExecInitSeqScan(SeqScan *node, EState *estate, int eflags)
 	 */
 	scanstate->ss.ps.qual =
 		ExecInitQual(node->plan.qual, (PlanState *) scanstate);
+#ifdef SCSLAB_CVC
+	if (VersionChainIsNewToOld(scanstate->ss.ss_currentRelation))
+	{
+		Oid			index_oid;
+		//Relation	index;
+		LOCKMODE	lockmode;
+
+		index_oid = RelationGetPrimaryKeyIndex(scanstate->ss.ss_currentRelation);
+		Assert(index_oid != InvalidOid);
+
+		lockmode = exec_rt_fetch(node->scanrelid, estate)->rellockmode;
+		//lockmode = AccessShareLock;
+		scanstate->primary_index = index_open(index_oid, lockmode);
+		scanstate->iss_ScanDesc = NULL;
+	}
+#endif
 
 	return scanstate;
 }
@@ -184,6 +297,10 @@ void
 ExecEndSeqScan(SeqScanState *node)
 {
 	TableScanDesc scanDesc;
+#ifdef SCSLAB_CVC
+	IndexScanDesc	indexScanDesc = node->iss_ScanDesc;
+	Relation		index = node->primary_index;
+#endif
 
 	/*
 	 * get information from node
@@ -207,6 +324,12 @@ ExecEndSeqScan(SeqScanState *node)
 	 */
 	if (scanDesc != NULL)
 		table_endscan(scanDesc);
+#ifdef SCSLAB_CVC
+	if (indexScanDesc != NULL)
+		index_endscan(indexScanDesc);
+	if (index != NULL)
+		index_close(index, NoLock);
+#endif
 }
 
 /* ----------------------------------------------------------------

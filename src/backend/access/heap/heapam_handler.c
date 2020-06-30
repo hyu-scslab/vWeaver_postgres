@@ -62,6 +62,14 @@ static BlockNumber heapam_scan_get_blocks_done(HeapScanDesc hscan);
 
 static const TableAmRoutine heapam_methods;
 
+#ifdef SCSLAB_CVC
+bool fetch_visible_tuple(
+		struct IndexFetchTableData *scan,
+		ItemPointer tid,
+		Snapshot snapshot,
+		TupleTableSlot *slot,
+		bool *call_again, bool *all_dead);
+#endif
 
 /* ------------------------------------------------------------------------
  * Slot related callbacks for heap AM
@@ -375,7 +383,7 @@ fetch_visible_tuple_with_vRidge(
  * Get a visible version(tuple) by tranversing with t_ctid.
  * This code refers to heap_get_latest_tid().
  */
-static bool
+bool
 fetch_visible_tuple(
 		struct IndexFetchTableData *scan,
 		ItemPointer tid,

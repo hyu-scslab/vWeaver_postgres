@@ -228,13 +228,8 @@ cost_seqscan(Path *path, PlannerInfo *root,
 	else
 		path->rows = baserel->rows;
 
-#ifdef SCSLAB_CVC
-	/* Disable seq scan. */
-	startup_cost += disable_cost;
-#else
 	if (!enable_seqscan)
 		startup_cost += disable_cost;
-#endif
 
 	/* fetch estimated page cost for tablespace containing table */
 	get_tablespace_page_costs(baserel->reltablespace,

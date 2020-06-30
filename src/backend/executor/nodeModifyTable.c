@@ -1990,9 +1990,6 @@ tupconv_map_for_subplan(ModifyTableState *mtstate, int whichplan)
 }
 
 #ifdef SCSLAB_CVC
-bool get_next_key = false;
-bool pass_index_scan;
-bool rightmost_key = false;
 ItemPointerData		current_key_heaptid;
 IndexTupleIdData	current_key_index_id;
 ItemPointerData		next_key_heaptid;
@@ -2093,14 +2090,7 @@ ExecModifyTable(PlanState *pstate)
 		if (pstate->ps_ExprContext)
 			ResetExprContext(pstate->ps_ExprContext);
 
-#ifdef SCSLAB_CVC
-		get_next_key = true;
-		pass_index_scan = false;
-#endif
 		planSlot = ExecProcNode(subplanstate);
-#ifdef SCSLAB_CVC
-		get_next_key = false;
-#endif
 
 		if (TupIsNull(planSlot))
 		{
@@ -2253,10 +2243,22 @@ ExecModifyTable(PlanState *pstate)
 #ifdef SCSLAB_CVC
 				if (VersionChainIsNewToOld(estate->es_result_relation_info->ri_RelationDesc))
 				{
-					if (subplanstate != NULL && nodeTag(subplanstate) == T_IndexScanState)
+					if (subplanstate != NULL
+							&& (nodeTag(subplanstate) == T_IndexScanState
+								|| nodeTag(subplanstate) == T_SeqScanState))
 					{
-						slot->ituple_id =
-							castNode(IndexScanState, subplanstate)->ss.ps.ps_ExprContext->ecxt_scantuple->ituple_id;
+						if (nodeTag(subplanstate) == T_IndexScanState)
+						{
+							slot->ituple_id =
+								castNode(IndexScanState, subplanstate)
+								->ss.ps.ps_ExprContext->ecxt_scantuple->ituple_id;
+						}
+						if (nodeTag(subplanstate) == T_SeqScanState)
+						{
+							slot->ituple_id =
+								castNode(SeqScanState, subplanstate)
+								->ss.ps.ps_ExprContext->ecxt_scantuple->ituple_id;
+						}
 #ifdef SCSLAB_CVC_DEBUG
 						elog(WARNING, "[SCSLAB] ExecModifyTable : real heap tid : (%d, %d)"
 								", index tuple id : (%d, %d, %d)",
@@ -2269,15 +2271,8 @@ ExecModifyTable(PlanState *pstate)
 					}
 				}
 #endif
-#ifdef SCSLAB_CVC
-				get_next_key = true;
-#endif
 				slot = ExecUpdate(node, tupleid, oldtuple, slot, planSlot,
 								  &node->mt_epqstate, estate, node->canSetTag);
-#ifdef SCSLAB_CVC
-				get_next_key = false;
-				pass_index_scan = false;
-#endif
 				break;
 			case CMD_DELETE:
 				slot = ExecDelete(node, tupleid, oldtuple, planSlot,
