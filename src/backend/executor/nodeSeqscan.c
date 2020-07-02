@@ -53,7 +53,8 @@ static TupleTableSlot *
 SeqNext(SeqScanState *node)
 {
 #ifdef SCSLAB_CVC
-	if (VersionChainIsNewToOld(node->ss.ss_currentRelation))
+	if (VersionChainIsNewToOld(node->ss.ss_currentRelation)
+			&& node->primary_index != NULL)
 	{
 		/* Use index to use vWeaver. */
 		EState	   *estate;
@@ -275,12 +276,17 @@ ExecInitSeqScan(SeqScan *node, EState *estate, int eflags)
 		LOCKMODE	lockmode;
 
 		index_oid = RelationGetPrimaryKeyIndex(scanstate->ss.ss_currentRelation);
-		Assert(index_oid != InvalidOid);
-
-		lockmode = exec_rt_fetch(node->scanrelid, estate)->rellockmode;
-		//lockmode = AccessShareLock;
-		scanstate->primary_index = index_open(index_oid, lockmode);
-		scanstate->iss_ScanDesc = NULL;
+		if (index_oid == InvalidOid)
+		{
+			scanstate->primary_index = NULL;
+		}
+		else
+		{
+			lockmode = exec_rt_fetch(node->scanrelid, estate)->rellockmode;
+			//lockmode = AccessShareLock;
+			scanstate->primary_index = index_open(index_oid, lockmode);
+			scanstate->iss_ScanDesc = NULL;
+		}
 	}
 #endif
 
