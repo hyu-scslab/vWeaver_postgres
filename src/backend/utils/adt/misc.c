@@ -192,6 +192,52 @@ current_query(PG_FUNCTION_ARGS)
 	else
 		PG_RETURN_NULL();
 }
+#ifdef SCSLAB_CVC
+/*
+ * cvc_update_cost()
+ */
+Datum
+cvc_update_cost(PG_FUNCTION_ARGS)
+{
+#ifdef SCSLAB_CVC_STAT
+	char string[3000];
+	TimeSecData	current_time;
+
+	CVCGetTimestamp(&current_time);
+
+	sprintf(string,
+			"[SCSLAB_STAT] "
+			"<== time : %10ld.%06ld ==> "
+			"<== v_ridgy begin : %10ld.%06ld ==> "
+			"<== v_ridgy end : %10ld.%06ld ==> "
+			"<== k_ridgy begin : %10ld.%06ld ==> "
+			"<== k_ridgy end : %10ld.%06ld ==> "
+			"<== commit begin : %10ld.%06ld ==> "
+			"<== commit end : %10ld.%06ld ==>"
+			,
+			current_time.sec, current_time.microsec,
+			update_cost_stat->begin_v_ridgy.sec, update_cost_stat->begin_v_ridgy.microsec,
+			update_cost_stat->end_v_ridgy.sec, update_cost_stat->end_v_ridgy.microsec,
+			update_cost_stat->begin_k_ridgy.sec, update_cost_stat->begin_k_ridgy.microsec,
+			update_cost_stat->end_k_ridgy.sec, update_cost_stat->end_k_ridgy.microsec,
+			update_cost_stat->begin_commit.sec, update_cost_stat->begin_commit.microsec,
+			update_cost_stat->end_commit.sec, update_cost_stat->end_commit.microsec
+		   );
+	PG_RETURN_TEXT_P(cstring_to_text(string));
+#else
+	PG_RETURN_NULL();
+#endif
+}
+#else
+/*
+ * cvc_update_cost()
+ */
+Datum
+cvc_update_cost(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_NULL();
+}
+#endif
 
 /* Function to find out which databases make use of a tablespace */
 

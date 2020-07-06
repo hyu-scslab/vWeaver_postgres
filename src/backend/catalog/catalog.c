@@ -19,6 +19,11 @@
 
 #include <fcntl.h>
 #include <unistd.h>
+#ifdef SCSLAB_CVC
+#ifdef SCSLAB_CVC_STAT
+#include <time.h>
+#endif
+#endif
 
 #include "access/genam.h"
 #include "access/htup_details.h"
@@ -544,3 +549,30 @@ pg_nextoid(PG_FUNCTION_ARGS)
 
 	return newoid;
 }
+#ifdef SCSLAB_CVC
+#ifdef SCSLAB_CVC_STAT
+UpdateCostStatData	update_cost_stat_data;
+UpdateCostStat		update_cost_stat = &update_cost_stat_data;
+
+void
+CVCSetTimestampClear(TimeSec time)
+{
+	time->sec = InvalidTimestamp;
+	time->microsec = InvalidTimestamp;
+}
+void
+CVCGetTimestamp(TimeSec time)
+{
+	struct timespec	tms;
+	int64_t			micros;
+
+	timespec_get(&tms, TIME_UTC);
+
+	micros = tms.tv_sec * 1000000;
+	micros += tms.tv_nsec / 1000;
+
+	time->sec = micros / 1000000;
+	time->microsec = micros % 1000000;
+}
+#endif
+#endif

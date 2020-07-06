@@ -66,6 +66,11 @@
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
 #include "pg_trace.h"
+#ifdef SCSLAB_CVC
+#ifdef SCSLAB_CVC_STAT
+#include "catalog/catalog.h"
+#endif
+#endif
 
 
 /*
@@ -2045,6 +2050,11 @@ CommitTransaction(void)
 	TransactionState s = CurrentTransactionState;
 	TransactionId latestXid;
 	bool		is_parallel_worker;
+#ifdef SCSLAB_CVC
+#ifdef SCSLAB_CVC_STAT
+	CVCGetTimestamp(&update_cost_stat->begin_commit);
+#endif
+#endif
 
 	is_parallel_worker = (s->blockState == TBLOCK_PARALLEL_INPROGRESS);
 
@@ -2272,6 +2282,11 @@ CommitTransaction(void)
 	s->state = TRANS_DEFAULT;
 
 	RESUME_INTERRUPTS();
+#ifdef SCSLAB_CVC
+#ifdef SCSLAB_CVC_STAT
+	CVCGetTimestamp(&update_cost_stat->end_commit);
+#endif
+#endif
 }
 
 

@@ -64,6 +64,11 @@
 #include "utils/rls.h"
 #include "utils/ruleutils.h"
 #include "utils/snapmgr.h"
+#ifdef SCSLAB_CVC
+#ifdef SCSLAB_CVC_STAT
+#include "catalog/catalog.h"
+#endif
+#endif
 
 
 /* Hooks for plugins to get control in ExecutorStart/Run/Finish/End */

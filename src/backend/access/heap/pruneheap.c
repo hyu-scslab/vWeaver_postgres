@@ -191,6 +191,14 @@ heap_page_prune(Relation relation, Buffer buffer, TransactionId OldestXmin,
 	OffsetNumber offnum,
 				maxoff;
 	PruneState	prstate;
+#ifdef SCSLAB_CVC
+#ifdef SCSLAB_CVC_DISABLE_PRUNE
+	if (VersionChainIsNewToOld(relation))
+	{
+		return 0;
+	}
+#endif
+#endif
 
 	/*
 	 * Our strategy is to scan the page and make lists of items to change,

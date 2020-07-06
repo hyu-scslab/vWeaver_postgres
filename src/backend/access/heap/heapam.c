@@ -4213,6 +4213,9 @@ l2:
 
 		ItemPointer		nextkeytup;
 
+#ifdef SCSLAB_CVC_STAT
+		CVCGetTimestamp(&update_cost_stat->begin_v_ridgy);
+#endif
 		/* v_ridgy */
 		coin = CoinToss();
 
@@ -4240,7 +4243,13 @@ l2:
 			newtup_vRidge_ptr = oldtup_ptr;
 			newtup_vRidge_level = oldtup_level;
 		}
+#ifdef SCSLAB_CVC_STAT
+		CVCGetTimestamp(&update_cost_stat->end_v_ridgy);
+#endif
 
+#ifdef SCSLAB_CVC_STAT
+		CVCGetTimestamp(&update_cost_stat->begin_k_ridgy);
+#endif
 		/* k_ridgy */
 		nextkeytup = &next_key_heaptid;
 		find_kRidge_target(
@@ -4249,6 +4258,9 @@ l2:
 				GetTransactionSnapshot(),
 				&kRidge_ptr,
 				&kRidge_itup_id);
+#ifdef SCSLAB_CVC_STAT
+		CVCGetTimestamp(&update_cost_stat->end_k_ridgy);
+#endif
 
 		/* old tuple */
 		/* Latch the buffer containing the new tuple. */
