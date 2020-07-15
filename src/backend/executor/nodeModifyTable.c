@@ -550,7 +550,7 @@ ExecInsert(ModifyTableState *mtstate,
 										   specToken);
 
 			/* insert index entries for tuple */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 			recheckIndexes = ExecInsertIndexTuples(slot, estate, true,
 												   &specConflict,
 												   arbiterIndexes, false);
@@ -595,7 +595,7 @@ ExecInsert(ModifyTableState *mtstate,
 
 			/* insert index entries for tuple */
 			if (resultRelInfo->ri_NumIndices > 0)
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 				recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL,
 													   NIL, false);
 #else
@@ -1455,7 +1455,7 @@ lreplace:;
 
 		/* insert index entries for tuple if necessary */
 		if (resultRelInfo->ri_NumIndices > 0 && update_indexes)
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 			recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL, NIL, true);
 #else
 			recheckIndexes = ExecInsertIndexTuples(slot, estate, false, NULL, NIL);
@@ -1989,7 +1989,7 @@ tupconv_map_for_subplan(ModifyTableState *mtstate, int whichplan)
 	return mtstate->mt_per_subplan_tupconv_maps[whichplan];
 }
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 ItemPointerData		current_key_heaptid;
 IndexTupleIdData	current_key_index_id;
 ItemPointerData		next_key_heaptid;
@@ -2240,7 +2240,7 @@ ExecModifyTable(PlanState *pstate)
 					estate->es_result_relation_info = resultRelInfo;
 				break;
 			case CMD_UPDATE:
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 				if (VersionChainIsNewToOld(estate->es_result_relation_info->ri_RelationDesc))
 				{
 					if (subplanstate != NULL
@@ -2259,8 +2259,8 @@ ExecModifyTable(PlanState *pstate)
 								castNode(SeqScanState, subplanstate)
 								->ss.ps.ps_ExprContext->ecxt_scantuple->ituple_id;
 						}
-#ifdef SCSLAB_CVC_DEBUG
-						elog(WARNING, "[SCSLAB] ExecModifyTable : real heap tid : (%d, %d)"
+#ifdef VWEAVER_DEBUG
+						elog(WARNING, "[VWEAVER] ExecModifyTable : real heap tid : (%d, %d)"
 								", index tuple id : (%d, %d, %d)",
 								ItemPointerGetBlockNumber(tupleid),
 								ItemPointerGetOffsetNumber(tupleid),

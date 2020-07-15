@@ -19,7 +19,7 @@
 #include "storage/bufpage.h"
 #include "storage/itemptr.h"
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 /*
  * Unique combination to identify each index entry.
  */
@@ -58,7 +58,7 @@ typedef IndexTupleIdData* IndexTupleId;
 
 typedef struct IndexTupleData
 {
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	/*
 	 * t_tid is only worked for tiebreaker and the role for reference TID
 	 * to heap tuple is taken by t_heap_tid.

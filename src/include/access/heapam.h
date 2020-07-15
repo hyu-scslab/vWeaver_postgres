@@ -218,7 +218,7 @@ extern bool ResolveCminCmaxDuringDecoding(struct HTAB *tuplecid_data,
 										  Buffer buffer,
 										  CommandId *cmin, CommandId *cmax);
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern CmdType curr_cmdtype;
 #endif
 #endif							/* HEAPAM_H */

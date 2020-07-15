@@ -481,7 +481,7 @@ ginHeapTupleInsert(GinState *ginstate, OffsetNumber attnum,
 					   item, 1, NULL);
 }
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 bool
 gininsert(Relation index, Datum *values, bool *isnull,
 		  ItemPointer ht_ctid, IndexTupleId itup_id, Relation heapRel,

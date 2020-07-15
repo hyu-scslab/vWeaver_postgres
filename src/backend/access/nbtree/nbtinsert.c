@@ -41,7 +41,7 @@ static OffsetNumber _bt_findinsertloc(Relation rel,
 									  BTStack stack,
 									  Relation heapRel);
 static void _bt_stepright(Relation rel, BTInsertState insertstate, BTStack stack);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 static void _bt_insertonpg(Relation rel, BTScanInsert itup_key,
 						   Buffer buf,
 						   Buffer cbuf,
@@ -66,7 +66,7 @@ static void _bt_insert_parent(Relation rel, Buffer buf, Buffer rbuf,
 							  BTStack stack, bool is_root, bool is_only);
 static bool _bt_pgaddtup(Page page, Size itemsize, IndexTuple itup,
 						 OffsetNumber itup_off);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 static bool _bt_pgaddtup_inplace(Page page, Size itemsize, IndexTuple itup,
 						 OffsetNumber itup_off);
 #endif
@@ -90,7 +90,7 @@ static void _bt_vacuum_one_page(Relation rel, Buffer buffer, Relation heapRel);
  *		successful UNIQUE_CHECK_YES or UNIQUE_CHECK_EXISTING call, but
  *		that's just a coding artifact.)
  */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 bool
 _bt_doinsert(Relation rel, IndexTuple itup,
 			 IndexUniqueCheck checkUnique, Relation heapRel,
@@ -111,10 +111,10 @@ _bt_doinsert(Relation rel, IndexTuple itup,
 
 	/* we need an insertion scan key to do our search, so build one */
 	itup_key = _bt_mkscankey(rel, itup);
-#ifdef SCSLAB_CVC_DEBUG
+#ifdef VWEAVER_DEBUG
 	if (VersionChainIsNewToOld(rel))
 	{
-		elog(WARNING, "[SCSLAB] itup key : real heap tid : (%d, %d)"
+		elog(WARNING, "[VWEAVER] itup key : real heap tid : (%d, %d)"
 				", index tuple id : (%d, %d, %d)",
 				ItemPointerGetBlockNumber(&itup_key->itup_id.tid),
 				ItemPointerGetOffsetNumber(&itup_key->itup_id.tid),
@@ -333,10 +333,10 @@ top:
 		 */
 		newitemoff = _bt_findinsertloc(rel, &insertstate, checkingunique,
 									   stack, heapRel);
-#ifdef SCSLAB_CVC
-#ifdef SCSLAB_CVC_DEBUG
+#ifdef VWEAVER
+#ifdef VWEAVER_DEBUG
 		if (VersionChainIsNewToOld(rel)) {
-			elog(WARNING, "[SCSLAB] newoffset %s, %d",
+			elog(WARNING, "[VWEAVER] newoffset %s, %d",
 					RelationGetRelationName(rel), newitemoff);
 		}
 #endif
@@ -486,7 +486,7 @@ _bt_check_unique(Relation rel, BTInsertState insertstate, Relation heapRel,
 
 				/* okay, we gotta fetch the heap tuple ... */
 				curitup = (IndexTuple) PageGetItem(page, curitemid);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 				if (VersionChainIsNewToOld(rel))
 				{
 					htid = curitup->t_heap_tid;
@@ -504,7 +504,7 @@ _bt_check_unique(Relation rel, BTInsertState insertstate, Relation heapRel,
 				 * are rechecking.  It's not a duplicate, but we have to keep
 				 * scanning.
 				 */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 				if (VersionChainIsNewToOld(rel) &&
 						checkUnique == UNIQUE_CHECK_EXISTING &&
 						ItemPointerCompare(&htid, &itup->t_heap_tid) == 0)
@@ -600,10 +600,10 @@ _bt_check_unique(Relation rel, BTInsertState insertstate, Relation heapRel,
 						break;
 					}
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 					if (VersionChainIsNewToOld(heapRel)) {
-#ifdef SCSLAB_CVC_DEBUG
-						elog(WARNING, "[SCSLAB] unique check.. why... : %s",
+#ifdef VWEAVER_DEBUG
+						elog(WARNING, "[VWEAVER] unique check.. why... : %s",
 								RelationGetRelationName(heapRel));
 #endif
 						break;
@@ -1011,7 +1011,7 @@ _bt_stepright(Relation rel, BTInsertState insertstate, BTStack stack)
  *		INCOMPLETE_SPLIT flag on it, and release the buffer.
  *----------
  */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 static void
 _bt_insertonpg(Relation rel,
 			   BTScanInsert itup_key,
@@ -1067,7 +1067,7 @@ _bt_insertonpg(Relation rel,
 	 * so this comparison is correct even though we appear to be accounting
 	 * only for the item and not for its line pointer.
 	 */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (!inplaceUpdate && PageGetFreeSpace(page) < itemsz)
 #else
 	if (PageGetFreeSpace(page) < itemsz)
@@ -1096,9 +1096,9 @@ _bt_insertonpg(Relation rel,
 				 BlockNumberIsValid(RelationGetTargetBlock(rel))));
 
 		/* split the buffer into left and right halves */
-#ifdef SCSLAB_CVC_DEBUG
+#ifdef VWEAVER_DEBUG
 		if (VersionChainIsNewToOld(rel)) {
-			elog(WARNING, "[SCSLAB] split!!!! %s", RelationGetRelationName(rel));
+			elog(WARNING, "[VWEAVER] split!!!! %s", RelationGetRelationName(rel));
 		}
 #endif
 		rbuf = _bt_split(rel, itup_key, buf, cbuf, newitemoff, itemsz, itup);
@@ -1176,7 +1176,7 @@ _bt_insertonpg(Relation rel,
 		/* Do the update.  No ereport(ERROR) until changes are logged */
 		START_CRIT_SECTION();
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 		if (inplaceUpdate) {
 			//Assert(OffsetNumberIsValid(OffsetNumberPrev(newitemoff)));
 			//Assert(newitemoff != P_FIRSTDATAKEY(lpageop));
@@ -1185,16 +1185,16 @@ _bt_insertonpg(Relation rel,
 			Assert(OffsetNumberIsValid(newitemoff));
 			Assert(_bt_check_natts(rel, true, page, newitemoff));
 			Assert(P_ISLEAF(lpageop));
-#ifdef SCSLAB_CVC_DEBUG
-			elog(WARNING, "[SCSLAB] pgaddtup inplace : %s", RelationGetRelationName(rel));
-			elog(WARNING, "[SCSLAB] index entry : (%d, %d), tid : (%d, %d)",
+#ifdef VWEAVER_DEBUG
+			elog(WARNING, "[VWEAVER] pgaddtup inplace : %s", RelationGetRelationName(rel));
+			elog(WARNING, "[VWEAVER] index entry : (%d, %d), tid : (%d, %d)",
 					buf, newitemoff,
 					ItemPointerGetBlockNumber(&itup->t_tid),
 					ItemPointerGetOffsetNumber(&itup->t_tid));
 #endif
 
 			if (!_bt_pgaddtup_inplace(page, itemsz, itup, newitemoff))
-				elog(PANIC, "[SCSLAB] failed to add new item to block %u in index \"%s\"",
+				elog(PANIC, "[VWEAVER] failed to add new item to block %u in index \"%s\"",
 					 itup_blkno, RelationGetRelationName(rel));
 
 			Assert(_bt_check_natts(rel, true, page, newitemoff));
@@ -1965,7 +1965,7 @@ _bt_insert_parent(Relation rel,
 				 RelationGetRelationName(rel), bknum, rbknum);
 
 		/* Recursively update the parent */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 		_bt_insertonpg(rel, NULL, pbuf, buf, stack->bts_parent,
 					   new_item, stack->bts_offset + 1,
 					   is_only, false);
@@ -2379,7 +2379,7 @@ _bt_pgaddtup(Page page,
 
 	return true;
 }
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 static bool
 _bt_pgaddtup_inplace(Page page,
 			 Size itemsize,

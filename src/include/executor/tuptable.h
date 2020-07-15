@@ -19,7 +19,7 @@
 #include "access/tupdesc.h"
 #include "access/htup_details.h"
 #include "storage/buf.h"
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 #include "access/itup.h"
 #endif
 
@@ -132,7 +132,7 @@ typedef struct TupleTableSlot
 	MemoryContext tts_mcxt;		/* slot itself is in this context */
 	ItemPointerData tts_tid;	/* stored tuple's tid */
 	Oid			tts_tableOid;	/* table oid of tuple */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	/*
 	 * Unique id for each index entry.
 	 * This is used at update query.

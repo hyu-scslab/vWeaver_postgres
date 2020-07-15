@@ -965,7 +965,7 @@ cost_bitmap_heap_scan(Path *path, PlannerInfo *root, RelOptInfo *baserel,
 	else
 		path->rows = baserel->rows;
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	/* Disable bitmap scan. */
 	startup_cost += disable_cost;
 #else

@@ -69,7 +69,7 @@
 #include "utils/snapmgr.h"
 #include "utils/spccache.h"
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 CmdType curr_cmdtype;
 #endif
 
@@ -107,7 +107,7 @@ static bool ConditionalMultiXactIdWait(MultiXactId multi, MultiXactStatus status
 static XLogRecPtr log_heap_new_cid(Relation relation, HeapTuple tup);
 static HeapTuple ExtractReplicaIdentity(Relation rel, HeapTuple tup, bool key_modified,
 										bool *copy);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 static void find_vRidge_target(Relation relation, Level level,
 		TransactionId current_xid, ItemPointerData current_ptr,
 		Level current_level, TransactionId *find_xid, ItemPointerData *find_ptr,
@@ -1919,7 +1919,7 @@ heap_insert(Relation relation, HeapTuple tup, CommandId cid,
 	/* NO EREPORT(ERROR) from here till changes are logged */
 	START_CRIT_SECTION();
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	RelationPutHeapTuple(relation, buffer, heaptup,
 						 (options & HEAP_INSERT_SPECULATIVE) != 0,
 						 true);
@@ -2202,7 +2202,7 @@ heap_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples,
 		 * RelationGetBufferForTuple has ensured that the first tuple fits.
 		 * Put that on the page, and then as many other tuples as fit.
 		 */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 		RelationPutHeapTuple(relation, buffer, heaptuples[ndone], false, true);
 #else
 		RelationPutHeapTuple(relation, buffer, heaptuples[ndone], false);
@@ -2214,7 +2214,7 @@ heap_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples,
 			if (PageGetHeapFreeSpace(page) < MAXALIGN(heaptup->t_len) + saveFreeSpace)
 				break;
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 			RelationPutHeapTuple(relation, buffer, heaptup, false, true);
 #else
 			RelationPutHeapTuple(relation, buffer, heaptup, false);
@@ -2388,7 +2388,7 @@ heap_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples,
 	}
 
 	/* copy t_self fields back to the caller's slots */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	for (i = 0; i < ntuples; i++)
 	{
 		IndexTupleIdSet(&slots[i]->ituple_id, &heaptuples[i]->t_self, GetCurrentTransactionId());
@@ -2745,7 +2745,7 @@ l1:
 	tp.t_data->t_infomask2 &= ~HEAP_KEYS_UPDATED;
 	tp.t_data->t_infomask |= new_infomask;
 	tp.t_data->t_infomask2 |= new_infomask2;
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(relation))
 	{
 		HeapTupleHeaderSetHotUpdated(tp.t_data);
@@ -2917,7 +2917,7 @@ simple_heap_delete(Relation relation, ItemPointer tid)
 	}
 }
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 static void
 find_vRidge_target(
 		Relation			relation,
@@ -3142,8 +3142,8 @@ find_kRidge_target(
 			 * This version is invisible to this transacion, but it would be
 			 * visible for another transaction who use k_ridge.
 			 */
-#ifdef SCSLAB_CVC_DEBUG
-			elog(WARNING, "[SCSLAB] deleted version %s",
+#ifdef VWEAVER_DEBUG
+			elog(WARNING, "[VWEAVER] deleted version %s",
 					RelationGetRelationName(relation));
 #endif
 			got_heap_tuple = true;
@@ -3267,7 +3267,7 @@ heap_update(Relation relation, ItemPointer otid, HeapTuple newtup,
 				infomask2_old_tuple,
 				infomask_new_tuple,
 				infomask2_new_tuple;
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	TransactionId	oldtup_vRidge_xid;
 	ItemPointerData	oldtup_vRidge_ptr;
 	Level			oldtup_vRidge_level;
@@ -3758,9 +3758,9 @@ l2:
 
 	newtupsize = MAXALIGN(newtup->t_len);
 
-#ifdef SCSLAB_CVC_DEBUG
+#ifdef VWEAVER_DEBUG
 	if (VersionChainIsNewToOld(relation) && need_toast) {
-		elog(WARNING, "[SCSLAB] toast %s", RelationGetRelationName(relation));
+		elog(WARNING, "[VWEAVER] toast %s", RelationGetRelationName(relation));
 	}
 #endif
 	if (need_toast || newtupsize > pagefree)
@@ -3987,7 +3987,7 @@ l2:
 	 */
 	PageSetPrunable(page, xid);
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(relation)) {
 		/*
 		 * HeapOnly flag means it is safe to make the lp_flage of this tuple
@@ -4042,7 +4042,7 @@ l2:
 		HeapTupleClearHeapOnly(newtup);
 	}
 #endif
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(relation))
 	{
 		/* Link new to old. */
@@ -4066,7 +4066,7 @@ l2:
 
 #endif
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	/* insert new tuple */
 	RelationPutHeapTuple(relation, newbuf, heaptup, false, false);
 #else
@@ -4086,11 +4086,11 @@ l2:
 
 	/* record address of new tuple in t_ctid of old one */
 	oldtup.t_data->t_ctid = heaptup->t_self;
-#ifdef SCSLAB_CVC
-#ifdef SCSLAB_CVC_DEBUG
+#ifdef VWEAVER
+#ifdef VWEAVER_DEBUG
 	if (VersionChainIsNewToOld(relation))
 	{
-		elog(WARNING, "[SCSLAB] heap update %s (%d, %d) -> (%d, %d)",
+		elog(WARNING, "[VWEAVER] heap update %s (%d, %d) -> (%d, %d)",
 				RelationGetRelationName(relation),
 				ItemPointerGetBlockNumber(&oldtup.t_self),
 				ItemPointerGetOffsetNumber(&oldtup.t_self),
@@ -4099,7 +4099,7 @@ l2:
 	}
 #endif
 #endif
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(relation))
 	{
 		oldtup_vRidge_xid = oldtup.t_data->t_vRidge_xid;
@@ -4183,7 +4183,7 @@ l2:
 		ReleaseBuffer(vmbuffer_new);
 	if (BufferIsValid(vmbuffer))
 		ReleaseBuffer(vmbuffer);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	/*
 	 * Linking vRidge jobs play here because we might traverse multiple blocks
 	 * and order of latching blocks must be sequential on PostgreSQL.
@@ -4213,7 +4213,7 @@ l2:
 
 		ItemPointer		nextkeytup;
 
-#ifdef SCSLAB_CVC_STAT
+#ifdef VWEAVER_STAT
 		CVCGetTimestamp(&update_cost_stat->begin_v_ridgy);
 #endif
 		/* v_ridgy */
@@ -4243,11 +4243,11 @@ l2:
 			newtup_vRidge_ptr = oldtup_ptr;
 			newtup_vRidge_level = oldtup_level;
 		}
-#ifdef SCSLAB_CVC_STAT
+#ifdef VWEAVER_STAT
 		CVCGetTimestamp(&update_cost_stat->end_v_ridgy);
 #endif
 
-#ifdef SCSLAB_CVC_STAT
+#ifdef VWEAVER_STAT
 		CVCGetTimestamp(&update_cost_stat->begin_k_ridgy);
 #endif
 		/* k_ridgy */
@@ -4258,7 +4258,7 @@ l2:
 				GetTransactionSnapshot(),
 				&kRidge_ptr,
 				&kRidge_itup_id);
-#ifdef SCSLAB_CVC_STAT
+#ifdef VWEAVER_STAT
 		CVCGetTimestamp(&update_cost_stat->end_k_ridgy);
 #endif
 

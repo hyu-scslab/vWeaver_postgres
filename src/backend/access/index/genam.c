@@ -124,7 +124,7 @@ RelationGetIndexScan(Relation indexRelation, int nkeys, int norderbys)
 	scan->xs_itupdesc = NULL;
 	scan->xs_hitup = NULL;
 	scan->xs_hitupdesc = NULL;
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(indexRelation) && curr_cmdtype == CMD_UPDATE)
 	{
 		scan->get_next_key = true;

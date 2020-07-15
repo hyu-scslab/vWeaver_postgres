@@ -154,7 +154,7 @@ CatalogIndexInsert(CatalogIndexState indstate, HeapTuple heapTuple)
 		/*
 		 * The index AM does the rest.
 		 */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 		index_insert(index,		/* index relation */
 					 values,	/* array of index Datums */
 					 isnull,	/* is-null flags */

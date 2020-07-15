@@ -241,7 +241,7 @@ hashbuildCallback(Relation index,
  *	Hash on the heap tuple's key, form an index tuple with hash code.
  *	Find the appropriate location for the new tuple, and put it there.
  */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 bool
 hashinsert(Relation rel, Datum *values, bool *isnull,
 		   ItemPointer ht_ctid, IndexTupleId itup_id, Relation heapRel,

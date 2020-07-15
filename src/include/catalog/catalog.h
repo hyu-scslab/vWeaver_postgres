@@ -16,8 +16,8 @@
 
 #include "catalog/pg_class.h"
 #include "utils/relcache.h"
-#ifdef SCSLAB_CVC
-#ifdef SCSLAB_CVC_STAT
+#ifdef VWEAVER
+#ifdef VWEAVER_STAT
 #include "datatype/timestamp.h"
 #endif
 #endif
@@ -43,8 +43,8 @@ extern Oid	GetNewOidWithIndex(Relation relation, Oid indexId,
 							   AttrNumber oidcolumn);
 extern Oid	GetNewRelFileNode(Oid reltablespace, Relation pg_class,
 							  char relpersistence);
-#ifdef SCSLAB_CVC
-#ifdef SCSLAB_CVC_STAT
+#ifdef VWEAVER
+#ifdef VWEAVER_STAT
 
 #define InvalidTimestamp	(-1)
 

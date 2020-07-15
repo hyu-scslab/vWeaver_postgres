@@ -87,7 +87,7 @@ extern void brin_free_desc(BrinDesc *bdesc);
 extern IndexBuildResult *brinbuild(Relation heap, Relation index,
 								   struct IndexInfo *indexInfo);
 extern void brinbuildempty(Relation index);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern bool brininsert(Relation idxRel, Datum *values, bool *nulls,
 					   ItemPointer heaptid, IndexTupleId itup_id,
 					   Relation heapRel, IndexUniqueCheck checkUnique,

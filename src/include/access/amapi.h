@@ -68,7 +68,7 @@ typedef IndexBuildResult *(*ambuild_function) (Relation heapRelation,
 typedef void (*ambuildempty_function) (Relation indexRelation);
 
 /* insert this tuple */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 typedef bool (*aminsert_function) (Relation indexRelation,
 								   Datum *values,
 								   bool *isnull,

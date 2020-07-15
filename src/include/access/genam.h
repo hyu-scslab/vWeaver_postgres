@@ -138,7 +138,7 @@ typedef struct IndexOrderByDistance
 extern Relation index_open(Oid relationId, LOCKMODE lockmode);
 extern void index_close(Relation relation, LOCKMODE lockmode);
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern bool index_insert(Relation indexRelation,
 						 Datum *values, bool *isnull,
 						 ItemPointer heap_t_ctid,

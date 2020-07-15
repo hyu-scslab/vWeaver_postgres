@@ -393,7 +393,7 @@ typedef struct GiSTOptions
 
 /* gist.c */
 extern void gistbuildempty(Relation index);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern bool gistinsert(Relation r, Datum *values, bool *isnull,
 					   ItemPointer ht_ctid, IndexTupleId itup_id,
 					   Relation heapRel, IndexUniqueCheck checkUnique,

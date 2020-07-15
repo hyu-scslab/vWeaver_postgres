@@ -1672,7 +1672,7 @@ toast_save_datum(Relation rel, Datum value,
 		{
 			/* Only index relations marked as ready can be updated */
 			if (toastidxs[i]->rd_index->indisready)
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 				index_insert(toastidxs[i], t_values, t_isnull,
 							 &(toasttup->t_self), NULL, toastrel,
 							 toastidxs[i]->rd_index->indisunique ?

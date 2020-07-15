@@ -3123,7 +3123,7 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_UNIT_BLOCKS | GUC_EXPLAIN,
 		},
 		&min_parallel_table_scan_size,
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 		/* Disable parallel scan. */
 		(512 * 1024 * 1024), 0, INT_MAX / 3,
 #else
@@ -3139,7 +3139,7 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_UNIT_BLOCKS | GUC_EXPLAIN,
 		},
 		&min_parallel_index_scan_size,
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 		/* Disable parallel scan. */
 		(512 * 1024 * 1024), 0, INT_MAX / 3,
 #else

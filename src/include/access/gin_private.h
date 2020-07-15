@@ -108,7 +108,7 @@ extern Datum gintuple_get_key(GinState *ginstate, IndexTuple tuple,
 extern IndexBuildResult *ginbuild(Relation heap, Relation index,
 								  struct IndexInfo *indexInfo);
 extern void ginbuildempty(Relation index);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern bool gininsert(Relation index, Datum *values, bool *isnull,
 					  ItemPointer ht_ctid, IndexTupleId itup_id,
 					  Relation heapRel, IndexUniqueCheck checkUnique,

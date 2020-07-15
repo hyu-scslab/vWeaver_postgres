@@ -32,7 +32,7 @@
 #include "executor/execdebug.h"
 #include "executor/nodeSeqscan.h"
 #include "utils/rel.h"
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 #include "access/genam.h"
 #endif
 
@@ -52,7 +52,7 @@ static TupleTableSlot *SeqNext(SeqScanState *node);
 static TupleTableSlot *
 SeqNext(SeqScanState *node)
 {
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(node->ss.ss_currentRelation)
 			&& node->primary_index != NULL)
 	{
@@ -268,7 +268,7 @@ ExecInitSeqScan(SeqScan *node, EState *estate, int eflags)
 	 */
 	scanstate->ss.ps.qual =
 		ExecInitQual(node->plan.qual, (PlanState *) scanstate);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(scanstate->ss.ss_currentRelation))
 	{
 		Oid			index_oid;
@@ -303,7 +303,7 @@ void
 ExecEndSeqScan(SeqScanState *node)
 {
 	TableScanDesc scanDesc;
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	IndexScanDesc	indexScanDesc = node->iss_ScanDesc;
 	Relation		index = node->primary_index;
 #endif
@@ -330,7 +330,7 @@ ExecEndSeqScan(SeqScanState *node)
 	 */
 	if (scanDesc != NULL)
 		table_endscan(scanDesc);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (indexScanDesc != NULL)
 		index_endscan(indexScanDesc);
 	if (index != NULL)

@@ -113,7 +113,7 @@ _bt_mkscankey(Relation rel, IndexTuple itup)
 	key->keysz = Min(indnkeyatts, tupnatts);
 	key->scantid = key->heapkeyspace && itup ?
 		BTreeTupleGetHeapTID(itup) : NULL;
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(rel) && itup != NULL)
 	{
 		key->itup_id.xid = itup->t_ancester_xid;
@@ -1801,9 +1801,9 @@ _bt_killitems(IndexScanDesc scan)
 			if (ItemPointerEquals(&ituple->t_tid, &kitem->heapTid))
 			{
 				/* found the item */
-#ifdef SCSLAB_CVC_DEBUG
+#ifdef VWEAVER_DEBUG
 				if (VersionChainIsNewToOld(scan->heapRelation)) {
-					elog(WARNING, "[SCSLAB] ItemIdMarkDead %s",
+					elog(WARNING, "[VWEAVER] ItemIdMarkDead %s",
 							RelationGetRelationName(scan->indexRelation));
 				}
 #endif

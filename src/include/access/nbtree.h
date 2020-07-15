@@ -474,7 +474,7 @@ typedef struct BTScanInsertData
 	bool		nextkey;
 	bool		pivotsearch;
 	ItemPointer scantid;		/* tiebreaker for scankeys */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	IndexTupleIdData	itup_id;
 #endif
 	int			keysz;			/* Size of scankeys array */
@@ -546,7 +546,7 @@ typedef struct BTScanPosItem	/* what we remember about each match */
 	ItemPointerData heapTid;	/* TID of referenced heap item */
 	OffsetNumber indexOffset;	/* index item's location within page */
 	LocationIndex tupleOffset;	/* IndexTuple's offset in workspace, if any */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	/* index entry's unique id */
 	ItemPointerData	tid;
 	TransactionId	xid;
@@ -712,7 +712,7 @@ typedef BTScanOpaqueData *BTScanOpaque;
  * external entry points for btree, in nbtree.c
  */
 extern void btbuildempty(Relation index);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern bool btinsert(Relation rel, Datum *values, bool *isnull,
 					 ItemPointer ht_ctid, IndexTupleId itup_id,
 					 Relation heapRel, IndexUniqueCheck checkUnique,
@@ -753,7 +753,7 @@ extern void _bt_parallel_advance_array_keys(IndexScanDesc scan);
 /*
  * prototypes for functions in nbtinsert.c
  */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern bool _bt_doinsert(Relation rel, IndexTuple itup,
 						 IndexUniqueCheck checkUnique, Relation heapRel,
 						 bool inplaceUpdate);
@@ -804,7 +804,7 @@ extern BTStack _bt_search(Relation rel, BTScanInsert key, Buffer *bufP,
 extern Buffer _bt_moveright(Relation rel, BTScanInsert key, Buffer buf,
 							bool forupdate, BTStack stack, int access, Snapshot snapshot);
 extern OffsetNumber _bt_binsrch_insert(Relation rel, BTInsertState insertstate);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern OffsetNumber _bt_linear_search_in_page(Relation rel, BTInsertState insertstate);
 #endif
 extern int32 _bt_compare(Relation rel, BTScanInsert key, Page page, OffsetNumber offnum);

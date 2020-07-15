@@ -47,7 +47,7 @@ static int	heap_prune_chain(Relation relation, Buffer buffer,
 							 OffsetNumber rootoffnum,
 							 TransactionId OldestXmin,
 							 PruneState *prstate);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 static int	heap_prune_one(Relation relation, Buffer buffer,
 							 OffsetNumber rootoffnum,
 							 TransactionId OldestXmin,
@@ -191,8 +191,8 @@ heap_page_prune(Relation relation, Buffer buffer, TransactionId OldestXmin,
 	OffsetNumber offnum,
 				maxoff;
 	PruneState	prstate;
-#ifdef SCSLAB_CVC
-#ifdef SCSLAB_CVC_DISABLE_PRUNE
+#ifdef VWEAVER
+#ifdef VWEAVER_DISABLE_PRUNE
 	if (VersionChainIsNewToOld(relation))
 	{
 		return 0;
@@ -233,7 +233,7 @@ heap_page_prune(Relation relation, Buffer buffer, TransactionId OldestXmin,
 		if (!ItemIdIsUsed(itemid) || ItemIdIsDead(itemid))
 			continue;
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 		if (VersionChainIsNewToOld(relation)) {
 			ndeleted += heap_prune_one(relation, buffer, offnum,
 										 OldestXmin,
@@ -642,7 +642,7 @@ heap_prune_chain(Relation relation, Buffer buffer, OffsetNumber rootoffnum,
 
 	return ndeleted;
 }
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 static int
 heap_prune_one(Relation relation, Buffer buffer, OffsetNumber offnum,
 				 TransactionId OldestXmin,
@@ -711,8 +711,8 @@ heap_prune_one(Relation relation, Buffer buffer, OffsetNumber offnum,
 	/* This version might be pointed by index. */
 	if (HeapTupleSatisfiesVacuum(&tup, OldestXmin, buffer)
 		== HEAPTUPLE_DEAD && HeapTupleHeaderIsHotUpdated(htup)) {
-#ifdef SCSLAB_CVC_DEBUG
-		elog(WARNING, "[SCSLAB] heap prune record %s (%d, %d)",
+#ifdef VWEAVER_DEBUG
+		elog(WARNING, "[VWEAVER] heap prune record %s (%d, %d)",
 				RelationGetRelationName(relation), buffer, offnum);
 #endif
 		// TODO: Uncommitted version is not considered..

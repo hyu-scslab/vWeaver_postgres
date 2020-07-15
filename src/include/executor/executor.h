@@ -567,7 +567,7 @@ extern TupleTableSlot *ExecGetReturningSlot(EState *estate, ResultRelInfo *relIn
  */
 extern void ExecOpenIndices(ResultRelInfo *resultRelInfo, bool speculative);
 extern void ExecCloseIndices(ResultRelInfo *resultRelInfo);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern List *ExecInsertIndexTuples(TupleTableSlot *slot, EState *estate, bool noDupErr,
 								   bool *specConflict, List *arbiterIndexes, bool inplaceUpdate);
 #else

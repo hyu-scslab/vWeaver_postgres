@@ -30,7 +30,7 @@ static bool _bt_readpage(IndexScanDesc scan, ScanDirection dir,
 						 OffsetNumber offnum);
 static void _bt_saveitem(BTScanOpaque so, int itemIndex,
 						 OffsetNumber offnum, IndexTuple itup);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 static void _bt_saveitem_nextkey(BTScanOpaque so, int itemIndex,
 						 OffsetNumber offnum, IndexTuple itup);
 #endif
@@ -426,7 +426,7 @@ _bt_binsrch(Relation rel,
 	return OffsetNumberPrev(low);
 }
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 OffsetNumber
 _bt_linear_search_in_page(Relation rel, BTInsertState insertstate)
 {
@@ -438,8 +438,8 @@ _bt_linear_search_in_page(Relation rel, BTInsertState insertstate)
 //	OffsetNumber	offset;
 //	int32			result;
 //
-//#ifdef SCSLAB_CVC_DEBUG
-//	elog(WARNING, "[SCSLAB] bt_linear_search_in_page %s %d",
+//#ifdef VWEAVER_DEBUG
+//	elog(WARNING, "[VWEAVER] bt_linear_search_in_page %s %d",
 //			RelationGetRelationName(rel), insertstate->buf);
 //#endif
 //	page = BufferGetPage(insertstate->buf);
@@ -462,8 +462,8 @@ _bt_linear_search_in_page(Relation rel, BTInsertState insertstate)
 //		high = insertstate->stricthigh;
 //	}
 //
-//#ifdef SCSLAB_CVC_DEBUG
-//	elog(WARNING, "[SCSLAB] _bt_linear_search_in_page %s, low %d, high %d)",
+//#ifdef VWEAVER_DEBUG
+//	elog(WARNING, "[VWEAVER] _bt_linear_search_in_page %s, low %d, high %d)",
 //			RelationGetRelationName(rel), low, high);
 //#endif
 //	/* We would not use cached low & high. */
@@ -474,8 +474,8 @@ _bt_linear_search_in_page(Relation rel, BTInsertState insertstate)
 //	/* If there are no keys on the page, return the first available slot */
 //	if (unlikely(high < low))
 //	{
-//#ifdef SCSLAB_CVC_DEBUG
-//		elog(WARNING, "[SCSLAB] no keys on the page %s",
+//#ifdef VWEAVER_DEBUG
+//		elog(WARNING, "[VWEAVER] no keys on the page %s",
 //				RelationGetRelationName(rel));
 //#endif
 //		return low;
@@ -489,8 +489,8 @@ _bt_linear_search_in_page(Relation rel, BTInsertState insertstate)
 //
 //		for (offset = low; offset <= high; offset = OffsetNumberNext(offset))
 //		{
-//#ifdef SCSLAB_CVC_DEBUG
-//			elog(WARNING, "[SCSLAB] update case %s, %d %lu",
+//#ifdef VWEAVER_DEBUG
+//			elog(WARNING, "[VWEAVER] update case %s, %d %lu",
 //					RelationGetRelationName(rel), offset,
 //					PageGetMaxOffsetNumber(page));
 //#endif
@@ -498,8 +498,8 @@ _bt_linear_search_in_page(Relation rel, BTInsertState insertstate)
 //
 //			if (result == 0)
 //			{
-//#ifdef SCSLAB_CVC_DEBUG
-//				elog(WARNING, "[SCSLAB] update case return %s, %d",
+//#ifdef VWEAVER_DEBUG
+//				elog(WARNING, "[VWEAVER] update case return %s, %d",
 //						RelationGetRelationName(rel), offset);
 //#endif
 //				key->scantid = key->scantid_copy;
@@ -519,8 +519,8 @@ _bt_linear_search_in_page(Relation rel, BTInsertState insertstate)
 //
 //		ItemPointerSet(&dummy_tid, 0, FirstOffsetNumber);
 //		key->scantid = &dummy_tid;
-//#ifdef SCSLAB_CVC_DEBUG
-//		elog(WARNING, "[SCSLAB] insertion case %s",
+//#ifdef VWEAVER_DEBUG
+//		elog(WARNING, "[VWEAVER] insertion case %s",
 //				RelationGetRelationName(rel));
 //#endif
 //
@@ -532,8 +532,8 @@ _bt_linear_search_in_page(Relation rel, BTInsertState insertstate)
 //
 //		for (offset = low; offset <= high; offset = OffsetNumberNext(offset))
 //		{
-//#ifdef SCSLAB_CVC_DEBUG
-//			elog(WARNING, "[SCSLAB] insertion case %s, %d %lu",
+//#ifdef VWEAVER_DEBUG
+//			elog(WARNING, "[VWEAVER] insertion case %s, %d %lu",
 //					RelationGetRelationName(rel), offset,
 //					PageGetMaxOffsetNumber(page));
 //#endif
@@ -541,8 +541,8 @@ _bt_linear_search_in_page(Relation rel, BTInsertState insertstate)
 //
 //			if (result <= 0)
 //			{
-//#ifdef SCSLAB_CVC_DEBUG
-//				elog(WARNING, "[SCSLAB] insertion case return %s, %d",
+//#ifdef VWEAVER_DEBUG
+//				elog(WARNING, "[VWEAVER] insertion case return %s, %d",
 //						RelationGetRelationName(rel), offset);
 //#endif
 //				key->scantid = key->scantid_copy;
@@ -552,8 +552,8 @@ _bt_linear_search_in_page(Relation rel, BTInsertState insertstate)
 //
 //		key->scantid = key->scantid_copy;
 //
-//#ifdef SCSLAB_CVC_DEBUG
-//		elog(WARNING, "[SCSLAB] insertion case fail %s",
+//#ifdef VWEAVER_DEBUG
+//		elog(WARNING, "[VWEAVER] insertion case fail %s",
 //				RelationGetRelationName(rel));
 //#endif
 //
@@ -859,7 +859,7 @@ _bt_compare(Relation rel,
 		return 1;
 
 	Assert(ntupatts >= IndexRelationGetNumberOfKeyAttributes(rel));
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(rel))
 	{
 		int32 ret = ItemPointerCompare(key->scantid, heapTid);
@@ -1497,7 +1497,7 @@ readcomplete:
 	/* OK, itemIndex says what to return */
 	currItem = &so->currPos.items[so->currPos.itemIndex];
 	scan->xs_heaptid = currItem->heapTid;
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(rel))
 	{
 		/* Now, xs_tid is real heap tid and xs_heaptid is unique id. */
@@ -1560,7 +1560,7 @@ _bt_next(IndexScanDesc scan, ScanDirection dir)
 	/* OK, itemIndex says what to return */
 	currItem = &so->currPos.items[so->currPos.itemIndex];
 	scan->xs_heaptid = currItem->heapTid;
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(scan->indexRelation))
 	{
 		/* Now, xs_tid is real heap tid and xs_heaptid is unique id. */
@@ -1692,7 +1692,7 @@ _bt_readpage(IndexScanDesc scan, ScanDirection dir, OffsetNumber offnum)
 				_bt_saveitem(so, itemIndex, offnum, itup);
 				itemIndex++;
 			}
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 			else if (VersionChainIsNewToOld(scan->indexRelation)
 					&& scan->get_next_key)
 			{
@@ -1728,7 +1728,7 @@ _bt_readpage(IndexScanDesc scan, ScanDirection dir, OffsetNumber offnum)
 
 			truncatt = BTreeTupleGetNAtts(itup, scan->indexRelation);
 			_bt_checkkeys(scan, itup, truncatt, dir, &continuescan);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 			if (VersionChainIsNewToOld(scan->indexRelation)
 					&& scan->get_next_key)
 			{
@@ -1825,7 +1825,7 @@ _bt_saveitem(BTScanOpaque so, int itemIndex,
 
 	currItem->heapTid = itup->t_tid;
 	currItem->indexOffset = offnum;
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	currItem->tid = itup->t_heap_tid;
 	currItem->xid = itup->t_ancester_xid;
 	currItem->is_matched = true;
@@ -1839,7 +1839,7 @@ _bt_saveitem(BTScanOpaque so, int itemIndex,
 		so->currPos.nextTupleOffset += MAXALIGN(itupsz);
 	}
 }
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 static void
 _bt_saveitem_nextkey(BTScanOpaque so, int itemIndex,
 			 OffsetNumber offnum, IndexTuple itup)
@@ -2470,7 +2470,7 @@ _bt_endpoint(IndexScanDesc scan, ScanDirection dir)
 	/* OK, itemIndex says what to return */
 	currItem = &so->currPos.items[so->currPos.itemIndex];
 	scan->xs_heaptid = currItem->heapTid;
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(rel))
 	{
 		/* Now, xs_tid is real heap tid and xs_heaptid is unique id. */

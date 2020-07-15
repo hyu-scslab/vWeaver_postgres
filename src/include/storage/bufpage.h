@@ -422,7 +422,7 @@ extern void PageInit(Page page, Size pageSize, Size specialSize);
 extern bool PageIsVerified(Page page, BlockNumber blkno);
 extern OffsetNumber PageAddItemExtended(Page page, Item item, Size size,
 										OffsetNumber offsetNumber, int flags);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern OffsetNumber PageAddItemInplace(Page page, Item item, Size size,
 										OffsetNumber offsetNumber);
 #endif

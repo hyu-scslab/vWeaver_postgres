@@ -2480,7 +2480,7 @@ CopyMultiInsertBufferFlush(CopyMultiInsertInfo *miinfo,
 
 			cstate->cur_lineno = buffer->linenos[i];
 			recheckIndexes =
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 				ExecInsertIndexTuples(buffer->slots[i], estate, false, NULL,
 									  NIL, false);
 #else
@@ -3301,7 +3301,7 @@ CopyFrom(CopyState cstate)
 										   myslot, mycid, ti_options, bistate);
 
 						if (resultRelInfo->ri_NumIndices > 0)
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 							recheckIndexes = ExecInsertIndexTuples(myslot,
 																   estate,
 																   false,

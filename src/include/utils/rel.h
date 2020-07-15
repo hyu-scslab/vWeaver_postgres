@@ -26,7 +26,7 @@
 #include "storage/relfilenode.h"
 #include "utils/relcache.h"
 #include "utils/reltrigger.h"
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 #include "access/itup.h"
 #endif
 
@@ -610,11 +610,11 @@ typedef struct ViewOptions
 extern void RelationIncrementReferenceCount(Relation rel);
 extern void RelationDecrementReferenceCount(Relation rel);
 extern List *RelationGetRepsetList(Relation rel);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern bool VersionChainIsNewToOld(Relation rel);
 #endif
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 /*
  * Ok.. I decide to use global variables because it is too hard to use slots
  * to tranfer data between query plan nodes..
@@ -624,5 +624,5 @@ extern ItemPointerData	current_key_heaptid;
 extern IndexTupleIdData	current_key_index_id;
 extern ItemPointerData	next_key_heaptid;
 extern IndexTupleIdData	next_key_index_id;
-#endif /* SCSLAB_CVC */
+#endif /* VWEAVER */
 #endif							/* REL_H */

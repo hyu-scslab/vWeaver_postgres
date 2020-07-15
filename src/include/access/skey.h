@@ -16,7 +16,7 @@
 
 #include "access/attnum.h"
 #include "access/stratnum.h"
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 #include "access/itup.h"
 #endif
 #include "fmgr.h"

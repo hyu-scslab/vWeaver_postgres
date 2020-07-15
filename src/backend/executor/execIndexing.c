@@ -269,7 +269,7 @@ ExecCloseIndices(ResultRelInfo *resultRelInfo)
  *		Should we change the API to make it safer?
  * ----------------------------------------------------------------
  */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 List *
 ExecInsertIndexTuples(TupleTableSlot *slot,
 					  EState *estate,
@@ -287,7 +287,7 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 #endif
 {
 	ItemPointer tupleid = &slot->tts_tid;
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	IndexTupleId	itupleid = &slot->ituple_id;
 #endif
 	List	   *result = NIL;
@@ -404,7 +404,7 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 			checkUnique = UNIQUE_CHECK_PARTIAL;
 
 		satisfiesConstraint =
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 			index_insert(indexRelation, /* index relation */
 						 values,	/* array of index Datums */
 						 isnull,	/* null flags */

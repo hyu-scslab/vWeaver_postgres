@@ -19,7 +19,7 @@
 #include "access/tupmacs.h"
 #include "access/transam.h"
 #include "storage/bufpage.h"
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 #include "access/itup.h"
 #endif
 
@@ -152,7 +152,7 @@ typedef struct DatumTupleFields
 	 */
 } DatumTupleFields;
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 
 typedef enum { COIN_FRONT, COIN_BACK } Coin;
 
@@ -198,7 +198,7 @@ struct HeapTupleHeaderData
 
 	ItemPointerData t_ctid;		/* current TID of this or newer tuple (or a
 								 * speculative insertion token) */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	/* Fields for O2N */
 	/* TID of older tuple */
 	ItemPointerData t_ctid_prev;

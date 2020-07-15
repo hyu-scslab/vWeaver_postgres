@@ -192,21 +192,21 @@ current_query(PG_FUNCTION_ARGS)
 	else
 		PG_RETURN_NULL();
 }
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 /*
  * cvc_update_cost()
  */
 Datum
 cvc_update_cost(PG_FUNCTION_ARGS)
 {
-#ifdef SCSLAB_CVC_STAT
+#ifdef VWEAVER_STAT
 	char string[3000];
 	TimeSecData	current_time;
 
 	CVCGetTimestamp(&current_time);
 
 	sprintf(string,
-			"[SCSLAB_STAT] "
+			"[VWEAVER_STAT] "
 			"<== time : %10ld.%06ld ==> "
 			"<== v_ridgy begin : %10ld.%06ld ==> "
 			"<== v_ridgy end : %10ld.%06ld ==> "

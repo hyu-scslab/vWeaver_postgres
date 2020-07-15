@@ -538,13 +538,13 @@ lazy_scan_heap(Relation onerel, VacuumParams *params, LVRelStats *vacrelstats,
 				(errmsg("vacuuming \"%s.%s\"",
 						get_namespace_name(RelationGetNamespace(onerel)),
 						relname)));
-#ifdef SCSLAB_CVC_DEBUG
+#ifdef VWEAVER_DEBUG
 	if (VersionChainIsNewToOld(onerel)) {
-		elog(WARNING, "[SCSLAB] vacuum init : %s", relname);
-		elog(WARNING, "[SCSLAB] vacuum init : %d", nindexes);
+		elog(WARNING, "[VWEAVER] vacuum init : %s", relname);
+		elog(WARNING, "[VWEAVER] vacuum init : %d", nindexes);
 	}
 #endif
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(onerel)) {
 		/* disable vacuum */
 		return;

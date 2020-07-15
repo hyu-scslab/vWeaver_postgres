@@ -189,7 +189,7 @@ btbuildempty(Relation index)
  *		Descend the tree recursively, find the appropriate location for our
  *		new tuple, and put it there.
  */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 bool
 btinsert(Relation rel, Datum *values, bool *isnull,
 		 ItemPointer ht_ctid, IndexTupleId itup_id, Relation heapRel,
@@ -208,7 +208,7 @@ btinsert(Relation rel, Datum *values, bool *isnull,
 
 	/* generate an index tuple */
 	itup = index_form_tuple(RelationGetDescr(rel), values, isnull);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(rel))
 	{
 		Assert(itup_id != NULL);
@@ -225,7 +225,7 @@ btinsert(Relation rel, Datum *values, bool *isnull,
 	itup->t_tid = *ht_ctid;
 #endif
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	result = _bt_doinsert(rel, itup, checkUnique, heapRel, inplaceUpdate);
 #else
 	result = _bt_doinsert(rel, itup, checkUnique, heapRel);
@@ -307,7 +307,7 @@ btgettuple(IndexScanDesc scan, ScanDirection dir)
 		/* ... otherwise see if we have more array keys to deal with */
 	} while (so->numArrayKeys && _bt_advance_array_keys(scan, dir));
 
-#ifdef SCSLAB_CVC_DEBUG
+#ifdef VWEAVER_DEBUG
 //	if (VersionChainIsNewToOld(scan->heapRelation) && res) {
 //		elog(WARNING, "[SCLSAB] _bt_readpage %s, buf : %d, %d ~ %d, curr : %d"
 //				", tid : (%d, %d)",
@@ -1282,7 +1282,7 @@ restart:
 
 				itup = (IndexTuple) PageGetItem(page,
 												PageGetItemId(page, offnum));
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 				if (VersionChainIsNewToOld(rel))
 				{
 					htup = &(itup->t_heap_tid);

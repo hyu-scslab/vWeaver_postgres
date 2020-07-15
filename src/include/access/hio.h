@@ -34,7 +34,7 @@ typedef struct BulkInsertStateData
 } BulkInsertStateData;
 
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern void RelationPutHeapTuple(Relation relation, Buffer buffer,
 								 HeapTuple tuple, bool token, bool new_record);
 #else

@@ -64,8 +64,8 @@
 #include "utils/rls.h"
 #include "utils/ruleutils.h"
 #include "utils/snapmgr.h"
-#ifdef SCSLAB_CVC
-#ifdef SCSLAB_CVC_STAT
+#ifdef VWEAVER
+#ifdef VWEAVER_STAT
 #include "catalog/catalog.h"
 #endif
 #endif
@@ -1616,7 +1616,7 @@ ExecutePlan(EState *estate,
 	TupleTableSlot *slot;
 	uint64		current_tuple_count;
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	curr_cmdtype = operation;
 #endif
 	/*

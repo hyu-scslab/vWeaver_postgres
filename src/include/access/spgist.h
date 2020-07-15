@@ -200,7 +200,7 @@ extern bytea *spgoptions(Datum reloptions, bool validate);
 extern IndexBuildResult *spgbuild(Relation heap, Relation index,
 								  struct IndexInfo *indexInfo);
 extern void spgbuildempty(Relation index);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern bool spginsert(Relation index, Datum *values, bool *isnull,
 					  ItemPointer ht_ctid, IndexTupleId itup_id,
 					  Relation heapRel, IndexUniqueCheck checkUnique,

@@ -254,7 +254,7 @@ create_index_paths(PlannerInfo *root, RelOptInfo *rel)
 
 		/* Protect limited-size array in IndexClauseSets */
 		Assert(index->nkeycolumns <= INDEX_MAX_KEYS);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 		if (root->parse->commandType == CMD_UPDATE && !index->unique)
 		{
 			/* Force to always use primary index when find will-updated-tuple

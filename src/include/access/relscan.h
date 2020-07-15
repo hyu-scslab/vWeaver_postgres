@@ -129,7 +129,7 @@ typedef struct IndexScanDescData
 	HeapTuple	xs_hitup;		/* index data returned by AM, as HeapTuple */
 	struct TupleDescData *xs_hitupdesc; /* rowtype descriptor of xs_hitup */
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	/* index entry's unique id of result */
 	ItemPointerData	xs_tid;
 	TransactionId	xs_xid;

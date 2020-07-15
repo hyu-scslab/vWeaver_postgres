@@ -341,7 +341,7 @@ PageAddItemExtended(Page page,
 	return offsetNumber;
 }
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 OffsetNumber
 PageAddItemInplace(Page page,
 					Item item,
@@ -386,8 +386,8 @@ PageAddItemInplace(Page page,
 	/* Assume fitted size. */
 	Assert(size == ItemIdGetLength(itemId));
 
-#ifdef SCSLAB_CVC_DEBUG
-	elog(WARNING, "[SCSLAB] index entry off : %d, tid : (%d, %d) -> (%d, %d), "
+#ifdef VWEAVER_DEBUG
+	elog(WARNING, "[VWEAVER] index entry off : %d, tid : (%d, %d) -> (%d, %d), "
 			"real heap tid : (%d, %d) -> (%d, %d)",
 			offsetNumber,
 			ItemPointerGetBlockNumber(&((IndexTuple) olditem)->t_tid),

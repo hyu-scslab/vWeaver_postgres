@@ -1684,7 +1684,7 @@
   proname => 'current_query', proisstrict => 'f', provolatile => 'v',
   proparallel => 'r', prorettype => 'text', proargtypes => '',
   prosrc => 'current_query' },
-# SCSLAB_CVC
+# VWEAVER
 { oid => '811', descr => 'print vWeaver update cost stat',
   proname => 'cvc_update_cost', proisstrict => 'f', provolatile => 'v',
   proparallel => 'r', prorettype => 'text', proargtypes => '',

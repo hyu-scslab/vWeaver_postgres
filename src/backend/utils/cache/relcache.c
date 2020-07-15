@@ -2074,7 +2074,7 @@ RelationDecrementReferenceCount(Relation rel)
 	if (!IsBootstrapProcessingMode())
 		ResourceOwnerForgetRelationRef(CurrentResourceOwner, rel);
 }
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 bool
 VersionChainIsNewToOld(Relation rel)
 {

@@ -62,7 +62,7 @@ static BlockNumber heapam_scan_get_blocks_done(HeapScanDesc hscan);
 
 static const TableAmRoutine heapam_methods;
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 bool fetch_visible_tuple(
 		struct IndexFetchTableData *scan,
 		ItemPointer tid,
@@ -120,7 +120,7 @@ heapam_index_fetch_end(IndexFetchTableData *scan)
 
 	pfree(hscan);
 }
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 static void
 get_prev_version_k_ridgy(
 		Relation			relation,
@@ -313,8 +313,8 @@ fetch_visible_tuple_with_vRidge(
 			 * but this version is invisible. It means this record is deleted.
 			 * We would never find any visible version even if more travese chain.
 			 */
-#ifdef SCSLAB_CVC_DEBUG
-			elog(WARNING, "[SCSLAB] deleted version %s",
+#ifdef VWEAVER_DEBUG
+			elog(WARNING, "[VWEAVER] deleted version %s",
 					RelationGetRelationName(relation));
 #endif
 			UnlockReleaseBuffer(buffer);
@@ -475,7 +475,7 @@ fetch_visible_tuple(
 		{
 			got_heap_tuple = true;
 			*tid = ctid;
-#ifdef SCSLAB_CVC_VALIDATION
+#ifdef VWEAVER_VALIDATION
 #else
 			slot->tts_tableOid = RelationGetRelid(scan->rel);
 			ExecStoreBufferHeapTuple(heapTuple, slot, buffer);
@@ -531,52 +531,52 @@ heapam_index_fetch_tuple(struct IndexFetchTableData *scan,
 	IndexFetchHeapData *hscan = (IndexFetchHeapData *) scan;
 	BufferHeapTupleTableSlot *bslot = (BufferHeapTupleTableSlot *) slot;
 	bool		got_heap_tuple;
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	Relation	relation = hscan->xs_base.rel;
 #endif
 
 	Assert(TTS_IS_BUFFERTUPLE(slot));
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(relation))
 	{
-#ifdef SCSLAB_CVC_VALIDATION
+#ifdef VWEAVER_VALIDATION
 		ItemPointerData	validation_tid;
 		bool			validation_got_heap_tuple;
-#ifdef SCSLAB_CVC_DEBUG
+#ifdef VWEAVER_DEBUG
 		ItemPointerData	temp_tid = *tid;
-#endif /* SCSLAB_CVC_DEBUG */
+#endif /* VWEAVER_DEBUG */
 
 		validation_tid = *tid;
 
 		validation_got_heap_tuple = fetch_visible_tuple(
 				scan, &validation_tid, snapshot,
 				slot, call_again, all_dead);
-#endif /* SCSLAB_CVC_VALIDATION */
+#endif /* VWEAVER_VALIDATION */
 		got_heap_tuple = fetch_visible_tuple_with_vRidge(
 				scan, tid, snapshot,
 				slot, call_again, all_dead);
 
-#ifdef SCSLAB_CVC_VALIDATION
-#ifdef SCSLAB_CVC_DEBUG
+#ifdef VWEAVER_VALIDATION
+#ifdef VWEAVER_DEBUG
 		if (got_heap_tuple == false) {
-			elog(WARNING, "[SCSLAB] fail to fetch tuple");
-			elog(WARNING, "[SCSLAB] fetch tuple %s (%d, %d)",
+			elog(WARNING, "[VWEAVER] fail to fetch tuple");
+			elog(WARNING, "[VWEAVER] fetch tuple %s (%d, %d)",
 					RelationGetRelationName(relation),
 					ItemPointerGetBlockNumber(&temp_tid),
 					ItemPointerGetOffsetNumber(&temp_tid));
 		}
-#endif /* SCSLAB_CVC_DEBUG */
+#endif /* VWEAVER_DEBUG */
 		Assert(validation_got_heap_tuple == got_heap_tuple);
 		if (got_heap_tuple == true) {
 			Assert(ItemPointerEquals(&validation_tid, tid));
 		}
-#endif /* SCSLAB_CVC_VALIDATION */
+#endif /* VWEAVER_VALIDATION */
 
 //		if (snapshot->snapshot_type != SNAPSHOT_DIRTY
 //				&& !got_heap_tuple)
 //		{
-//			elog(WARNING, "[SCSLAB] fail to find visible version %s",
+//			elog(WARNING, "[VWEAVER] fail to find visible version %s",
 //					RelationGetRelationName(relation));
 //		}
 
@@ -713,7 +713,7 @@ heapam_tuple_insert(Relation relation, TupleTableSlot *slot, CommandId cid,
 	/* Perform the insertion, and copy the resulting ItemPointer */
 	heap_insert(relation, tuple, cid, options, bistate);
 	ItemPointerCopy(&tuple->t_self, &slot->tts_tid);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	IndexTupleIdSet(&slot->ituple_id, &tuple->t_self, GetCurrentTransactionId());
 #endif
 
@@ -801,7 +801,7 @@ heapam_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *slot,
 	 *
 	 * If it's a HOT update, we mustn't insert new index entries.
 	 */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(relation)) {
 		/*
 		 * Always update index because we make a index entry
@@ -2394,7 +2394,7 @@ heapam_index_validate_scan(Relation heapRelation,
 			 * there is one.
 			 */
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 			index_insert(indexRelation,
 						 values,
 						 isnull,

@@ -166,7 +166,7 @@ index_close(Relation relation, LOCKMODE lockmode)
  *		index_insert - insert an index tuple into a relation
  * ----------------
  */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 bool
 index_insert(Relation indexRelation,
 			 Datum *values,
@@ -196,7 +196,7 @@ index_insert(Relation indexRelation,
 									   (HeapTuple) NULL,
 									   InvalidBuffer);
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	return indexRelation->rd_indam->aminsert(indexRelation, values, isnull,
 											 heap_t_ctid, index_tuple_id,
 											 heapRelation,
@@ -562,7 +562,7 @@ index_getnext_tid(IndexScanDesc scan, ScanDirection direction)
 	pgstat_count_index_tuples(scan->indexRelation, 1);
 
 	/* Return the TID of the tuple we found. */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(scan->heapRelation))
 	{
 		return &scan->xs_tid;
@@ -600,7 +600,7 @@ index_fetch_heap(IndexScanDesc scan, TupleTableSlot *slot)
 	bool		all_dead = false;
 	bool		found;
 
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(scan->heapRelation))
 	{
 		found = table_index_fetch_tuple(scan->xs_heapfetch, &scan->xs_tid,
@@ -653,7 +653,7 @@ index_fetch_heap(IndexScanDesc scan, TupleTableSlot *slot)
 bool
 index_getnext_slot(IndexScanDesc scan, ScanDirection direction, TupleTableSlot *slot)
 {
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 	if (VersionChainIsNewToOld(scan->indexRelation) && curr_cmdtype == CMD_UPDATE)
 	{
 		Assert(!scan->xs_heap_continue);
@@ -780,7 +780,7 @@ index_getnext_slot(IndexScanDesc scan, ScanDirection direction, TupleTableSlot *
 					continue;
 				}
 
-				//elog(WARNING, "[SCSLAB] use k_ridgy");
+				//elog(WARNING, "[VWEAVER] use k_ridgy");
 				scan->xs_tid = scan->xs_k_ridgy_heaptid;
 			}
 

@@ -19,8 +19,8 @@
 
 #include <fcntl.h>
 #include <unistd.h>
-#ifdef SCSLAB_CVC
-#ifdef SCSLAB_CVC_STAT
+#ifdef VWEAVER
+#ifdef VWEAVER_STAT
 #include <time.h>
 #endif
 #endif
@@ -549,8 +549,8 @@ pg_nextoid(PG_FUNCTION_ARGS)
 
 	return newoid;
 }
-#ifdef SCSLAB_CVC
-#ifdef SCSLAB_CVC_STAT
+#ifdef VWEAVER
+#ifdef VWEAVER_STAT
 UpdateCostStatData	update_cost_stat_data;
 UpdateCostStat		update_cost_stat = &update_cost_stat_data;
 

@@ -140,7 +140,7 @@ brinhandler(PG_FUNCTION_ARGS)
  * If the range is not currently summarized (i.e. the revmap returns NULL for
  * it), there's nothing to do for this tuple.
  */
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 bool
 brininsert(Relation idxRel, Datum *values, bool *nulls,
 		   ItemPointer heaptid, IndexTupleId itup_id, Relation heapRel,

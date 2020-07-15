@@ -345,7 +345,7 @@ typedef HashMetaPageData *HashMetaPage;
 extern IndexBuildResult *hashbuild(Relation heap, Relation index,
 								   struct IndexInfo *indexInfo);
 extern void hashbuildempty(Relation index);
-#ifdef SCSLAB_CVC
+#ifdef VWEAVER
 extern bool hashinsert(Relation rel, Datum *values, bool *isnull,
 					   ItemPointer ht_ctid, IndexTupleId itup_id,
 					   Relation heapRel, IndexUniqueCheck checkUnique,
